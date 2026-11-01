@@ -24,6 +24,7 @@ function mount(props: {
   widthAnchorRef?: { current: HTMLElement | null }
   variant?: 'compact' | 'preview'
   openDelayMs?: number
+  width?: number
   disabled?: boolean
   copyText?: string
   copyLabel?: string
@@ -57,6 +58,14 @@ function installClipboard(writeText: (text: string) => Promise<void>): () => voi
 }
 
 describe('HoverCard', () => {
+  it('sizes a compact card from the width prop', () => {
+    const { wrapper } = mount({ width: 320 })
+    fireEvent.pointerEnter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect((screen.getByText('card body').parentElement as HTMLElement).style.width).toBe('320px')
+  })
+
+
   it.each([false, true])('opens mouse previews only when a pointer can hover: %s', (canHover) => {
     vi.stubGlobal('matchMedia', () => ({ matches: canHover }))
     const { wrapper } = mount()

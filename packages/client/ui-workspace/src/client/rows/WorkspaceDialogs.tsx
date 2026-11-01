@@ -1,13 +1,15 @@
 /** Workspace rename, removal, and directory-set dialogs, keyed by their captured request. */
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconCloseFillRegular, IconFolderOpenRegular, IconPlusOutlineRegular, Modal,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { WorkspaceActionRequest, WorkspaceBrowserProps } from '../contract/slots.ts'
 import css from './WorkspaceBrowser.module.css'
 
 type Props = Pick<
   WorkspaceBrowserProps,
-  'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction' | 't'
+  'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction' | 'requestWorkspaceAction' | 't'
 > & {
   request: WorkspaceActionRequest
   workspaces: readonly WorkspaceView[]
@@ -15,7 +17,7 @@ type Props = Pick<
 
 /** @param props - captured request, current Workspace list, and existing mutations. @returns the active dialog. */
 export function WorkspaceDialogs({
-  request, workspaces, renameWorkspace, deleteWorkspace, setWorkspacePaths, settleWorkspaceAction, t,
+  request, workspaces, renameWorkspace, deleteWorkspace, setWorkspacePaths, settleWorkspaceAction, requestWorkspaceAction, t,
 }: Props) {
   const composingRef = useRef(false)
   const renameTarget = request.action === 'rename' ? request : null
@@ -82,12 +84,15 @@ export function WorkspaceDialogs({
   }
 
   const foldersTarget = request.action === 'folders' ? request : null
+  const [nameDraft, setNameDraft] = useState(request.storedTitle)
   const [folderDraft, setFolderDraft] = useState<readonly string[]>(request.paths)
   const [folderInput, setFolderInput] = useState('')
   const [savingFolders, setSavingFolders] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
   const foldersChanged = folderDraft.length !== request.paths.length
     || folderDraft.some((path, index) => path !== request.paths[index])
+  const nameTrimmed = nameDraft.trim()
+  const nameChanged = nameTrimmed !== '' && nameTrimmed !== request.storedTitle
   const folderTrimmed = folderInput.trim()
   const canAddFolder = folderTrimmed !== '' && !folderDraft.includes(folderTrimmed) && !savingFolders
   const addFolder = () => {
@@ -97,7 +102,10 @@ export function WorkspaceDialogs({
     setFolderError(null)
   }
   const removeFolder = (path: string) => {
-    if (savingFolders || folderDraft.length === 1) return
+    if (folderDraft.length === 1) {
+      setFolderError(t('folders.keepOne'))
+      return
+    }
     setFolderDraft(folderDraft.filter(entry => entry !== path))
     setFolderError(null)
   }
@@ -107,16 +115,30 @@ export function WorkspaceDialogs({
     setFolderError(null)
   }
   const saveFolders = () => {
-    if (savingFolders || foldersTarget === null || !foldersChanged) return
+    if (savingFolders || foldersTarget === null || (!foldersChanged && !nameChanged)) return
+    const workspaceId = foldersTarget.workspaceId
     setSavingFolders(true)
     setFolderError(null)
-    setWorkspacePaths(foldersTarget.workspaceId, folderDraft).then(() => {
-      setSavingFolders(false)
-      settleWorkspaceAction()
-    }).catch((reason: unknown) => {
-      setSavingFolders(false)
-      setFolderError(reason instanceof Error ? reason.message : String(reason))
-    })
+    void (async () => {
+      try {
+        if (nameChanged) await renameWorkspace(workspaceId, nameTrimmed)
+        if (foldersChanged) await setWorkspacePaths(workspaceId, folderDraft)
+        setSavingFolders(false)
+        settleWorkspaceAction()
+      } catch (reason: unknown) {
+        setSavingFolders(false)
+        setFolderError(reason instanceof Error ? reason.message : String(reason))
+      }
+    })()
+  }
+  // The card's edit action removes the project through the same confirmation
+  // every other removal uses.
+  const removeProject = () => {
+    /* v8 ignore next -- the control is disabled while a save runs, and the dialog only opens with a target. */
+    if (savingFolders || foldersTarget === null) return
+    const { workspaceId, displayTitle } = foldersTarget
+    settleWorkspaceAction()
+    requestWorkspaceAction(workspaceId, displayTitle, 'delete')
   }
 
   return <>
@@ -185,49 +207,72 @@ export function WorkspaceDialogs({
       open={foldersTarget !== null}
       onClose={closeFolders}
       closeLabel={t('close')}
-      title={t('folders.title')}
+      title={t('edit.title')}
       footer={(
-        <>
-          <Button variant="outline" disabled={savingFolders} onClick={closeFolders}>{t('cancel')}</Button>
-          <Button variant="primary" disabled={savingFolders || !foldersChanged} onClick={saveFolders}>
-            {t('save')}
+        <div className={css.editFooter}>
+          <Button
+            variant="outline"
+            className={css.deleteAction}
+            disabled={savingFolders}
+            onClick={removeProject}
+          >
+            {t('edit.removeProject')}
           </Button>
-        </>
+          <div className={css.editActions}>
+            <Button variant="outline" disabled={savingFolders} onClick={closeFolders}>{t('cancel')}</Button>
+            <Button variant="primary" onClick={saveFolders}>
+              {t('save')}
+            </Button>
+          </div>
+        </div>
       )}
     >
-      <div className={css.folderHint}>{t('folders.desc')}</div>
+      <div className={css.editName}>
+        <IconFolderOpenRegular size={16} />
+        <input
+          className={css.editNameInput}
+          value={nameDraft}
+          aria-label={t('edit.name')}
+          disabled={savingFolders}
+          onChange={(event) => { setNameDraft(event.target.value); setFolderError(null) }}
+        />
+      </div>
+      <div className={css.editLabel}>{t('edit.sourceFolders')}</div>
       <ul className={css.folderList}>
         {folderDraft.map(path => (
           <li key={path} className={css.folderRow}>
+            <IconFolderOpenRegular size={15} />
             <span className={css.folderPath} title={path}>{path}</span>
-            <Button
-              variant="outline"
-              disabled={savingFolders || folderDraft.length === 1}
+            <button
+              type="button"
+              className={css.folderRemove}
               aria-label={t('folders.removeNamed', { path })}
+              disabled={savingFolders}
               onClick={() => { removeFolder(path) }}
             >
-              {t('folders.remove')}
-            </Button>
+              <IconCloseFillRegular size={12} />
+            </button>
           </li>
         ))}
+        <li className={css.folderAdd}>
+          <IconPlusOutlineRegular size={14} />
+          <input
+            className={css.editAddInput}
+            value={folderInput}
+            aria-label={t('folders.addLabel')}
+            placeholder={t('edit.addFolder')}
+            disabled={savingFolders}
+            onChange={(event) => { setFolderInput(event.target.value); setFolderError(null) }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                addFolder()
+              }
+            }}
+          />
+          <Button variant="outline" disabled={!canAddFolder} onClick={addFolder}>{t('folders.add')}</Button>
+        </li>
       </ul>
-      <div className={css.folderAdd}>
-        <input
-          className={css.renameInput}
-          value={folderInput}
-          aria-label={t('folders.addLabel')}
-          placeholder={t('folders.addPlaceholder')}
-          disabled={savingFolders}
-          onChange={(e) => { setFolderInput(e.target.value); setFolderError(null) }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              addFolder()
-            }
-          }}
-        />
-        <Button variant="outline" disabled={!canAddFolder} onClick={addFolder}>{t('folders.add')}</Button>
-      </div>
       {folderError !== null && <div className={css.renameError} role="alert">{folderError}</div>}
     </Modal>
   </>

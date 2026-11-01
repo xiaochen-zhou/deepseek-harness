@@ -711,35 +711,24 @@
   min-width: 0;
 }
 
-/* The Workspace card: title, Session count, and the directories it owns. It is
-   the sidebar's only anchored surface, so it carries the menu elevation. */
+/* The hovered Workspace card sits on the hover tooltip's dark surface, so it
+   uses the inverted label colors rather than the page tokens. */
 .card {
-  position: fixed;
-  top: auto;
-  left: auto;
-  box-sizing: border-box;
-  z-index: 1100;
   display: flex;
   flex-direction: column;
-  width: 400px;
-  max-width: calc(100vw - 24px);
-  padding: 14px 16px 12px;
-  border-radius: 16px;
-  background: var(--dsw-specific-menu);
-  backdrop-filter: var(--dsw-menu-backdrop-filter);
-  box-shadow: var(--dsw-elevation-prominent);
+  gap: 2px;
 }
 
 .cardHeader {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--dsw-alias-label-primary);
+  color: #ffffff;
 }
 
 .cardTitle {
   overflow: hidden;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -748,22 +737,22 @@
 .cardMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--dsw-alias-label-secondary);
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgb(255 255 255 / 72%);
 }
 
 .cardDivider {
   height: 1px;
   margin: 10px 0;
-  background: var(--dsw-alias-border-l1);
+  background: rgb(255 255 255 / 14%);
 }
 
 .cardList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   margin: 0;
   padding: 0;
   max-height: 40vh;
@@ -777,103 +766,118 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
-  padding: 0 4px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--dsw-alias-label-primary);
-}
-
-.cardRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 12px;
+  line-height: 18px;
+  color: rgb(255 255 255 / 88%);
 }
 
 .cardPath {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  line-height: 18px;
   overflow-wrap: anywhere;
 }
 
-.cardRemove {
+.cardEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 8%);
+  font-size: 13px;
+  color: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardEdit:hover {
+  background: rgb(255 255 255 / 16%);
+}
+
+/* The edit dialog: the project name, its source folders, and removal. */
+.editFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.editActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.editNameInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.editLabel {
+  margin: 14px 0 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderRemove {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  opacity: 0;
 }
 
-.cardRow:hover .cardRemove,
-.cardRemove:focus-visible {
-  opacity: 1;
-}
-
-.cardRemove:hover:not(:disabled) {
+.folderRemove:hover:not(:disabled) {
   color: var(--dsw-alias-label-primary);
 }
 
-.cardRemove:disabled {
+.folderRemove:disabled {
   cursor: default;
-  opacity: 0;
+  opacity: 0.4;
 }
 
-.cardAdd {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.cardInput {
+.editAddInput {
   flex: 1;
   min-width: 0;
-  box-sizing: border-box;
   height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
+  padding: 0;
+  border: 0;
   outline: none;
   background: transparent;
   font-size: 13px;
   color: var(--dsw-alias-label-primary);
 }
 
-.cardInput::placeholder {
+.editAddInput::placeholder {
   color: var(--dsw-alias-label-secondary);
-}
-
-.cardAddButton {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
-  background: transparent;
-  font-size: 13px;
-  color: var(--dsw-alias-label-primary);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.cardAddButton:disabled {
-  color: var(--dsw-alias-label-dimmed);
-  cursor: default;
-}
-
-.cardError {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--dsw-alias-state-error-primary);
 }

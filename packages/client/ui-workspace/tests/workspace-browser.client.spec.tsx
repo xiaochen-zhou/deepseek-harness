@@ -151,6 +151,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     notifyArchivedNotOpenable: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     setWorkspacePaths: vi.fn(async () => {}),
+    requestWorkspaceAction: vi.fn(),
     deleteWorkspace: vi.fn(async () => {}),
     unarchiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
@@ -309,6 +310,7 @@ describe('WorkspaceBrowser', () => {
         useWorkspaces: hook(workspaceState([{
           ...workspace('project', []),
           path: '/home/u/Documents/project',
+          paths: ['/home/u/Documents/project'],
           title: 'Project',
         }])),
         useHostInfo: selector => selector({ home: '/home/u', isLoopback: true }),
@@ -316,6 +318,30 @@ describe('WorkspaceBrowser', () => {
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(800) })
       expect(screen.getByText('~/Documents/project')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hover card lists the directories, the Session count, and the edit action', () => {
+    vi.useFakeTimers()
+    try {
+      const requestWorkspaceAction = vi.fn()
+      mount({
+        useSessions: hook(sessionState([summary('one', 3), summary('two', 2)])),
+        useWorkspaces: hook(workspaceState([{
+          ...workspace('alpha', [sid('one'), sid('two')], 'Alpha'),
+          paths: ['/projects/alpha', '/projects/shared'],
+        }])),
+        requestWorkspaceAction,
+      })
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(800) })
+      expect(screen.getByText('2 个会话')).toBeTruthy()
+      expect(screen.getByText('/projects/alpha')).toBeTruthy()
+      expect(screen.getByText('/projects/shared')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: '编辑项目' }))
+      expect(requestWorkspaceAction).toHaveBeenCalledWith(wid('alpha'), 'Alpha', 'folders')
     } finally {
       vi.useRealTimers()
     }
@@ -2482,25 +2508,139 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('edits the workspace folders through the row menu dialog', async () => {
+  it('edits the project name and folders through the card dialog', async () => {
+    const setWorkspacePaths = vi.fn(async () => {})
+    const renameWorkspace = vi.fn(async () => {})
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths,
+      renameWorkspace,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    expect(screen.getByRole('dialog').textContent).toContain('编辑项目')
+    expect(screen.getByRole('dialog').textContent).toContain('源文件夹')
+    expect(screen.getByLabelText<HTMLInputElement>('项目名称').value).toBe('Alpha')
+    // The primary directory stays: removing it explains the rule instead.
+    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/alpha' }))
+    expect(screen.getByRole('alert').textContent).toBe('工作区至少要保留一个文件夹')
+    expect(screen.getByText('/projects/alpha')).toBeTruthy()
+    // Save with nothing changed closes nothing and calls nothing.
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(renameWorkspace).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
+    fireEvent.change(input, { target: { value: '/projects/shared' } })
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    expect(screen.getByText('/projects/shared')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => {})
+    expect(renameWorkspace).not.toHaveBeenCalled()
+    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha', '/projects/shared'])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('saves a renamed project and opens removal from the same dialog', async () => {
+    const setWorkspacePaths = vi.fn(async () => {})
+    const renameWorkspace = vi.fn(async () => {})
+    const requestWorkspaceAction = vi.fn()
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths,
+      renameWorkspace,
+      requestWorkspaceAction,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>('项目名称'), { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => {})
+    expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Renamed')
+    expect(setWorkspacePaths).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
+    expect(requestWorkspaceAction).toHaveBeenCalledWith(wid('alpha'), 'Alpha', 'delete')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('adds a directory with Enter and ignores dismissal while saving', async () => {
+    let release: (() => void) | undefined
+    const setWorkspacePaths = vi.fn(() => new Promise<void>((resolve) => { release = resolve }))
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
+    // An empty draft cannot be added, and other keys leave the draft alone.
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: '/projects' } })
+    fireEvent.keyDown(input, { key: 'a' })
+    expect(screen.queryByText('/projects')).toBeNull()
+    fireEvent.change(input, { target: { value: '/projects/shared' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByText('/projects/shared')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    // Saving pins the dialog open: Escape and the close control are inert until it settles.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    await act(async () => { release?.() })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('ignores edits while a save runs and reports a non-Error failure', async () => {
+    let release: (() => void) | undefined
+    const setWorkspacePaths = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve }))
+      .mockImplementationOnce(async () => { throw 'folder conflict' })
+    const requestWorkspaceAction = vi.fn()
+    const shared = {
+      workspaceId: wid('alpha'), path: '/projects/alpha', paths: ['/projects/alpha', '/projects/shared'],
+      title: 'Alpha', sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    } as WorkspaceView
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([shared])),
+      setWorkspacePaths,
+      requestWorkspaceAction,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/shared' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => {})
+    // Every edit and the removal report rather than start while the save runs.
+    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/alpha' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除本地项目' }))
+    expect(requestWorkspaceAction).not.toHaveBeenCalled()
+    await act(async () => { release?.() })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('reports a non-Error failure as text', async () => {
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([{
+        workspaceId: wid('alpha'), path: '/projects/alpha', paths: ['/projects/alpha', '/projects/shared'],
+        title: 'Alpha', sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      } as WorkspaceView])),
+      setWorkspacePaths: vi.fn(async () => { throw 'folder conflict' }),
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/shared' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => {})
+    expect(screen.getByRole('alert').textContent).toBe('folder conflict')
+  })
+
+  it('closes the edit dialog without saving through Cancel', () => {
     const setWorkspacePaths = vi.fn(async () => {})
     const browser = mount({
       useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
       setWorkspacePaths,
     })
     browser.openDialog(wid('alpha'), 'Alpha', 'folders')
-    expect(screen.getByRole('dialog').textContent).toContain('工作区文件夹')
-    // The primary directory cannot be removed and Save stays inert while unchanged.
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '从工作区移除 /projects/alpha' }).disabled).toBe(true)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
-    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
-    fireEvent.change(input, { target: { value: '/projects/shared' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
-    expect(screen.getByText('/projects/shared')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
-    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha', '/projects/shared'])
-    await act(async () => {})
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>('文件夹路径'), { target: { value: '/projects/shared' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(setWorkspacePaths).not.toHaveBeenCalled()
   })
 
   it('removes a folder, blocks an empty set, and keeps the dialog on failure', async () => {
@@ -2847,93 +2987,5 @@ describe('Workspace tree grouping', () => {
     fireEvent.dragEnd(alpha)
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledOnce()
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledWith(wid('alpha'), wid('gamma'))
-  })
-})
-
-describe('Workspace card', () => {
-  const multi = {
-    workspaceId: wid('alpha'), path: '/projects/alpha', paths: ['/projects/alpha', '/projects/shared'],
-    title: 'Alpha', sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
-  } as WorkspaceView
-
-  it('opens from the row title with the Session count and every directory', () => {
-    const setWorkspacePaths = vi.fn(async () => {})
-    mount({
-      useSessions: hook(sessionState([summary('one', 3), summary('two', 2)])),
-      useWorkspaces: hook(workspaceState([{
-        ...multi,
-        sessionIds: [sid('one'), sid('two')],
-      }])),
-      setWorkspacePaths,
-    })
-    fireEvent.click(rowTitle('Alpha'))
-    const card = screen.getByRole('dialog')
-    expect(card.textContent).toContain('Alpha')
-    expect(card.textContent).toContain('2 个会话')
-    expect(card.textContent).toContain('/projects/alpha')
-    expect(card.textContent).toContain('/projects/shared')
-  })
-
-  it('appends an absolute directory and refuses a relative one', async () => {
-    const setWorkspacePaths = vi.fn(async () => {})
-    mount({ useWorkspaces: hook(workspaceState([multi])), setWorkspacePaths })
-    fireEvent.click(rowTitle('Alpha'))
-    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
-    fireEvent.change(input, { target: { value: 'relative/path' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
-    expect(screen.getByRole('alert').textContent).toContain('请输入绝对路径')
-    expect(setWorkspacePaths).not.toHaveBeenCalled()
-    fireEvent.change(input, { target: { value: '/projects/docs' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    await act(async () => {})
-    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha', '/projects/shared', '/projects/docs'])
-  })
-
-  it('ignores a directory the Workspace already owns', () => {
-    const setWorkspacePaths = vi.fn(async () => {})
-    mount({ useWorkspaces: hook(workspaceState([multi])), setWorkspacePaths })
-    fireEvent.click(rowTitle('Alpha'))
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>('文件夹路径'), { target: { value: '/projects/shared' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
-    expect(setWorkspacePaths).not.toHaveBeenCalled()
-  })
-
-  it('removes a directory and keeps the last one in place', async () => {
-    const setWorkspacePaths = vi.fn(async () => {})
-    mount({ useWorkspaces: hook(workspaceState([multi])), setWorkspacePaths })
-    fireEvent.click(rowTitle('Alpha'))
-    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/shared' }))
-    await act(async () => {})
-    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha'])
-    // A Workspace always owns one directory, so the last removal is unavailable.
-    cleanup()
-    mount({
-      useWorkspaces: hook(workspaceState([{ ...multi, paths: ['/projects/alpha'] }])),
-      setWorkspacePaths,
-    })
-    fireEvent.click(rowTitle('Alpha'))
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '从工作区移除 /projects/alpha' }).disabled).toBe(true)
-  })
-
-  it('keeps the card open with the failure message', async () => {
-    const setWorkspacePaths = vi.fn(async () => { throw new Error('folder conflict') })
-    mount({ useWorkspaces: hook(workspaceState([multi])), setWorkspacePaths })
-    fireEvent.click(rowTitle('Alpha'))
-    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/shared' }))
-    await act(async () => {})
-    expect(screen.getByRole('alert').textContent).toContain('folder conflict')
-    expect(screen.getByRole('dialog')).toBeTruthy()
-  })
-
-  it('closes on Escape and when the grouping changes', () => {
-    mount({ useWorkspaces: hook(workspaceState([multi])) })
-    fireEvent.click(rowTitle('Alpha'))
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog')).toBeNull()
-    fireEvent.click(rowTitle('Alpha'))
-    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
-    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
