@@ -125,6 +125,18 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   /**
+   * Replace a Workspace's directories and merge the unary result immediately.
+   * @param workspaceId - target Workspace.
+   * @param paths - ordered directories, primary first.
+   * @returns generated Remote result.
+   */
+  async setPaths(workspaceId: WorkspaceId, paths: readonly string[]): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.setPaths({ workspaceId, paths })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
    * Delete a Workspace and remove it from the local projection immediately.
    * @param workspaceId - target Workspace.
    * @returns generated Remote result.

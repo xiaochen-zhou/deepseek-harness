@@ -25,6 +25,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceSetPathsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -119,6 +120,18 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('rename')
   rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Replace the directories one Workspace owns, primary first. Sessions
+   * created from the Workspace afterwards run in the primary and may write
+   * under every directory in the set.
+   * @param request - Workspace identity and ordered directories.
+   * @returns the updated Workspace projection.
+   */
+  @Remote('setPaths')
+  setPaths(request: WorkspaceSetPathsRequest): Promise<WorkspaceValue> {
+    return this.commands.setPaths(request)
   }
 
   /**

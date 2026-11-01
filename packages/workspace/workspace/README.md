@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to keep an ordered, persistent list of project directories and the sessions run in each directory. Hosts can build project sidebars, hide sessions from grouping without deleting their histories, and remove projects without deleting folders, files, or sessions. Re-adding a removed directory creates a fresh project; an existing project's sessions stay grouped when its directory disappears. Choose it for GUI or host workflows that need durable project grouping; it is invisible to models and adds no prompt or request-context cost, but requires session persistence and storage backends.
+Use this package to keep an ordered, persistent list of projects, the directories each owns, and the sessions run in them: a project can own several directories, and a session run in any of them joins that project. Hosts can build project sidebars, hide sessions without deleting their histories, and remove projects without touching folders or sessions. Re-adding a directory starts a fresh project; an existing project keeps its sessions when a directory disappears. Choose it for durable project grouping; it is invisible to models and adds no prompt cost, but requires session persistence and storage backends.
 
 ## Table of Contents
 
@@ -59,6 +59,8 @@ await project.setTitle('Renamed')
 ctx.workspaceRegistry.list() // shows the project, newest first
 ```
 
+A project can own several directories: `setPaths(id, paths)` replaces the ordered directory list, and `paths` reports it. Every entry must be an existing directory; entries are canonicalized, repeated directories collapse to their first position, and a directory another project already owns is rejected with `WorkspacePathConflictError`. The first entry is the project's primary directory and the one a new session starts in. Sessions stay grouped only while the project owns the directory they run in, so dropping a directory from the list ungroups the sessions recorded there without touching their histories.
+
 <a id="first-use-workspace"></a>
 ### First-use Workspace
 
@@ -70,7 +72,7 @@ The first successful registration records its identity durably. Repeated calls r
 
 ### Grouping sessions under a project
 
-A session joins the project of the directory it runs in: create a session in a project's directory and it appears under that project, newest first. A session can only belong to one project. A new session must have a recorded directory that resolves to the project's directory. Already-accounted sessions keep their project and order when their fully qualified recorded path is missing, including a dangling symlink; renaming or reordering the project does not remove that ownership. Missing headers, invalid recorded paths, existing mismatched directories, and filesystem failures other than ENOENT remain excluded. Keeping ownership does not recreate the directory or relax new-session attachment, so a fork can still fail to attach while the directory is missing.
+A session joins the project that owns the directory it runs in: create a session in any directory a project owns and it appears under that project, newest first. A session can only belong to one project. A new session must have a recorded directory that resolves to one of the project's directories, and it snapshots that ordered list so the directories it may modify are fixed when it starts rather than following later edits to the project. Already-accounted sessions keep their project and order when their fully qualified recorded path is missing, including a dangling symlink; renaming or reordering the project does not remove that ownership. Missing headers, invalid recorded paths, existing mismatched directories, and filesystem failures other than ENOENT remain excluded. Keeping ownership does not recreate the directory or relax new-session attachment, so a fork can still fail to attach while the directory is missing.
 
 ### Hiding and restoring sessions, and removing projects
 
@@ -90,7 +92,7 @@ This section explains the design decisions behind the feature and points at the 
 
 ### Design philosophy
 
-- **One record per canonical path.** `fs.realpath` is the single uniqueness canon: paths are stored canonicalized, so a symlink to an owned directory collides, and uniqueness is string equality of canonical paths.
+- **One owner per canonical path.** `fs.realpath` is the single uniqueness canon: paths are stored canonicalized, so a symlink to an owned directory collides, and ownership is string equality of canonical paths across every directory of every project.
 - **Membership starts from the recorded account.** The header index validates ordered `sessionIds`; missing-directory candidates retain their account, while other invalid candidates are filtered on read and pruned by the next mutation. The strict canonical-path index used for history bootstrap includes existing directories only.
 - **Header-only reads.** Bootstrap and attach validation read `SessionHeader` fields only; event bodies are never loaded.
 - **Two-write mutations with an explicit marker.** Create and delete persist a `pendingMutation` marker before the record/order pair can diverge, so startup completes exactly the interrupted operation and unmarked divergence fails loud as corruption.

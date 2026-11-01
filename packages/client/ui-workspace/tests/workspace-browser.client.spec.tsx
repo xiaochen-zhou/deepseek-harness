@@ -67,7 +67,7 @@ const sessionState = (
   }
 }
 const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView => ({
-  workspaceId: wid(id), path: `/projects/${id}`, title,
+  workspaceId: wid(id), path: `/projects/${id}`, paths: [`/projects/${id}`], title,
   sessionIds: sessionIds.map(sid), createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 })
 const workspaceState = (
@@ -142,6 +142,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     searchResultLimit: 20,
     notifyArchivedNotOpenable: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
+    setWorkspacePaths: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     unarchiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
@@ -153,9 +154,10 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     ...overrides,
   }
   const view = render(<WorkspaceBrowser {...props} />)
-  return { view, props, store, controls, openDialog: (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete') => {
+  return { view, props, store, controls, openDialog: (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete' | 'folders') => {
     const storedTitle = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.title ?? displayTitle)
-    act(() => { request.set({ action, workspaceId, displayTitle, storedTitle }) })
+    const paths = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.paths ?? [displayTitle])
+    act(() => { request.set({ action, workspaceId, displayTitle, storedTitle, paths }) })
   } }
 }
 
@@ -2470,6 +2472,47 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     await act(async () => { resolveRename() })
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('edits the workspace folders through the row menu dialog', async () => {
+    const setWorkspacePaths = vi.fn(async () => {})
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    expect(screen.getByRole('dialog').textContent).toContain('工作区文件夹')
+    // The primary directory cannot be removed and Save stays inert while unchanged.
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '从工作区移除 /projects/alpha' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
+    fireEvent.change(input, { target: { value: '/projects/shared' } })
+    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    expect(screen.getByText('/projects/shared')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha', '/projects/shared'])
+    await act(async () => {})
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('removes a folder, blocks an empty set, and keeps the dialog on failure', async () => {
+    const setWorkspacePaths = vi.fn(async () => { throw new Error('folder conflict') })
+    const shared = {
+      workspaceId: wid('alpha'), path: '/projects/alpha', paths: ['/projects/alpha', '/projects/shared'],
+      title: 'Alpha', sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    } as WorkspaceView
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([shared])),
+      setWorkspacePaths,
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.click(screen.getByRole('button', { name: '从工作区移除 /projects/shared' }))
+    expect(screen.queryByText('/projects/shared')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(setWorkspacePaths).toHaveBeenCalledWith(wid('alpha'), ['/projects/alpha'])
+    await act(async () => {})
+    expect(screen.getByRole('alert').textContent).toBe('folder conflict')
+    expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
   it('rename via Enter, failure surfaces the error, Cancel closes', async () => {

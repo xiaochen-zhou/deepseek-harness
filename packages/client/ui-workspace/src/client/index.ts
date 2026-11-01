@@ -1,4 +1,4 @@
-import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutlineRegular, IconFolderOpenOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
@@ -263,14 +263,21 @@ export function apply(ctx: Context): void {
     dismissToast: () => { rowToast.set(null) },
   })
   const workspaceActionRequest = createSnapshotStore<WorkspaceActionRequest | null>(null)
-  const requestWorkspaceAction = (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete'): void => {
+  const requestWorkspaceAction = (
+    workspaceId: WorkspaceId,
+    displayTitle: string,
+    action: 'rename' | 'delete' | 'folders',
+  ): void => {
     const workspace = workspaces.list.getSnapshot().items.find(row => row.workspaceId === workspaceId)
     if (workspace === undefined || !ctx.remoteAccess.source('workspace', workspaceId, `workspace/${action}`).getSnapshot()) return
-    workspaceActionRequest.set({ action, workspaceId, displayTitle, storedTitle: workspace.title })
+    workspaceActionRequest.set({
+      action, workspaceId, displayTitle, storedTitle: workspace.title, paths: [...workspace.paths],
+    })
   }
   ctx.slots.inject('contextMenu.icon', function* () {
     for (const [key, Icon] of Object.entries({
-      'workspace.rename': IconEditOutlineRegular, 'workspace.delete': IconTrashOutlineRegular,
+      'workspace.rename': IconEditOutlineRegular, 'workspace.folders': IconFolderOpenOutlineRegular,
+      'workspace.delete': IconTrashOutlineRegular,
       'workspace.pin': IconPinOutlineRegular, 'workspace.unpin': IconPinFillRegular,
       'workspace.archive': IconArchiveOutlineRegular, 'workspace.unarchive': IconUnarchiveOutlineRegular,
       'workspace.fork': IconBranchOutlineRegular, 'workspace.copy': IconCopyOutlineRegular,
@@ -281,6 +288,12 @@ export function apply(ctx: Context): void {
     resolve: ({ workspaceId, displayTitle }) => ctx.remoteAccess.source('workspace', workspaceId, 'workspace/rename').getSnapshot()
       ? [{ id: 'rename', label: ctx.locale.bind(NS)('rename'), icon: { key: 'workspace.rename' }, run: () => { requestWorkspaceAction(workspaceId, displayTitle, 'rename') } }] : [],
   }), 'workspace: rename menu action')
+  ctx.effect(() => ctx.contextMenus.register({
+    id: 'workspace.folders', target: 'workspace', order: 200,
+    resolve: ({ workspaceId, displayTitle }) => ctx.remoteAccess.source('workspace', workspaceId, 'workspace/setPaths').getSnapshot()
+      ? [{ id: 'folders', label: ctx.locale.bind(NS)('folders.edit'), icon: { key: 'workspace.folders' },
+        run: () => { requestWorkspaceAction(workspaceId, displayTitle, 'folders') } }] : [],
+  }), 'workspace: folders menu action')
   ctx.effect(() => ctx.contextMenus.register({
     id: 'workspace.delete', target: 'workspace', order: 300,
     resolve: ({ workspaceId, displayTitle }) => ctx.remoteAccess.source('workspace', workspaceId, 'workspace/delete').getSnapshot()
@@ -308,6 +321,7 @@ export function apply(ctx: Context): void {
     requestSessionRename,
     notifyArchivedNotOpenable: () => { notify({ kind: 'archivedNotOpenable' }) },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
+    setWorkspacePaths: async (workspaceId, paths) => { await workspaces.setPaths(workspaceId, paths) },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
       await workspaces.insertBefore(workspaceId, beforeWorkspaceId)

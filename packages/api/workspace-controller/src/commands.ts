@@ -8,6 +8,7 @@ import {
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
+  WorkspacePathConflictError,
   WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
@@ -25,6 +26,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceSetPathsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -50,13 +52,42 @@ export class WorkspaceCommands {
           return { workspace: workspaceView(existing), created: false }
         }
         const workspace = await this.ctx.workspaceRegistry.create(request.path)
-        return { workspace: workspaceView(workspace), created: true }
+        const resolved = request.extraPaths === undefined || request.extraPaths.length === 0
+          ? workspace
+          : await this.ctx.workspaceRegistry.setPaths(workspace.id, [workspace.path, ...request.extraPaths])
+        return { workspace: workspaceView(resolved), created: true }
       } catch (error) {
         if (remoteErrorOf(error) !== undefined) throw error
         throw new RemoteError(
           'workspace/invalid-path',
           `cannot create a Workspace at "${request.path}": ${errorMessage(error)}`,
           { path: request.path },
+          { cause: error },
+        )
+      }
+    })
+  }
+
+  /**
+   * Replace the directory set one Workspace owns.
+   * @param request - Workspace identity and ordered directories, primary first.
+   * @returns the updated Workspace projection.
+   */
+  setPaths(request: WorkspaceSetPathsRequest): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      this.requireWorkspace(request.workspaceId)
+      try {
+        const workspace = await this.ctx.workspaceRegistry.setPaths(
+          WorkspaceId(request.workspaceId),
+          request.paths,
+        )
+        return { workspace: workspaceView(workspace) }
+      } catch (error) {
+        if (!(error instanceof WorkspacePathConflictError)) throw error
+        throw new RemoteError(
+          'workspace/path-conflict',
+          error.message,
+          { workspaceId: request.workspaceId },
           { cause: error },
         )
       }

@@ -60,12 +60,14 @@ declare module '@deepseek-ai/dsh-client-ui-context-menu/client' {
   }
 }
 
-/** One request for the existing Workspace rename or delete dialog. */
+/** One request for an existing Workspace dialog: rename, delete, or edit its directories. */
 export type WorkspaceActionRequest = {
-  readonly action: 'rename' | 'delete'
+  readonly action: 'rename' | 'delete' | 'folders'
   readonly workspaceId: WorkspaceId
   readonly displayTitle: string
   readonly storedTitle: string
+  /** Directories the Workspace owned when the request was raised; the folders editor's initial list. */
+  readonly paths: readonly string[]
 }
 
 /**
@@ -292,6 +294,11 @@ export type WorkspaceBrowserInjected = {
   notifyArchivedNotOpenable: () => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
+  /**
+   * Replace the directories a Host Workspace owns, primary first. Rejects when
+   * a directory is missing, repeated, or owned by another Workspace.
+   */
+  setWorkspacePaths: (workspaceId: WorkspaceId, paths: readonly string[]) => Promise<void>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
   deleteWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**
@@ -302,7 +309,7 @@ export type WorkspaceBrowserInjected = {
   /** Remove a Session from the registry-global archived set (the search results' restore button). */
   unarchiveSession: (sessionId: SessionId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
-  createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  createWorkspace: (input: { path: string; extraPaths?: readonly string[] }) => Promise<WorkspaceView>
 }
 
 /** The browser's declared viewing store handle, shared with the row actions that write view state. */
@@ -517,7 +524,7 @@ export type WorkspaceBrowserProps =
  */
 export type WorkspacePickerInjected = DirectoryPickingInjected & {
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
-  createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  createWorkspace: (input: { path: string; extraPaths?: readonly string[] }) => Promise<WorkspaceView>
 }
 
 /**

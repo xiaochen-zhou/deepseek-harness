@@ -42,10 +42,10 @@ export interface WorkspaceEntityHost {
    * Validate an already-accounted session, preserving ownership when its fully
    * qualified cwd cannot resolve because a path component is missing.
    * @param id - Session already present in this workspace's candidate account.
-   * @param path - Workspace's stored canonical directory.
+   * @param paths - Workspace's stored canonical directories.
    * @returns whether the candidate remains a member.
    */
-  candidateMatches(id: SessionId, path: string): boolean
+  candidateMatches(id: SessionId, paths: readonly string[]): boolean
 
   /**
    * Read one stored session header for attach validation.
@@ -65,6 +65,19 @@ export interface WorkspaceEntityHost {
 
 /** Chain-slot abort sentinel thrown by the update fn when the record needs no change; only `mutate` observes it. */
 const unchangedSentinel = new Error('workspace record unchanged (internal sentinel)')
+
+/** Every canonical directory of one record, primary first.
+ * @param record - The stored record whose directories to read.
+ * @returns the primary directory followed by the extra directories.
+ */
+export function recordPaths(record: WorkspaceRecord): readonly string[] {
+  return record.extraPaths.length === 0 ? [record.path] : [record.path, ...record.extraPaths]
+}
+
+/** Whether two canonical directory lists name the same directories in the same order. */
+function samePaths(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((path, index) => path === right[index])
+}
 
 /** The single {@link Workspace} implementation; constructed only by the registry. */
 export class WorkspaceEntity implements Workspace {
@@ -87,6 +100,10 @@ export class WorkspaceEntity implements Workspace {
     return this.record.path
   }
 
+  get paths(): readonly string[] {
+    return recordPaths(this.record)
+  }
+
   get title(): string {
     return this.record.title
   }
@@ -100,11 +117,21 @@ export class WorkspaceEntity implements Workspace {
   }
 
   get sessionIds(): readonly SessionId[] {
-    return this.record.sessionIds.filter(id => this.host.candidateMatches(id, this.record.path))
+    const paths = this.paths
+    return this.record.sessionIds.filter(id => this.host.candidateMatches(id, paths))
   }
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
+  }
+
+  /** Replace the owned directories; only the registry calls this after validating ownership.
+   * @param paths - Canonical directory list, primary first.
+   */
+  async setPaths(paths: readonly string[]): Promise<void> {
+    await this.mutate(record => samePaths(recordPaths(record), paths)
+      ? record
+      : { ...record, path: paths[0] as string, extraPaths: paths.slice(1) })
   }
 
   async attachSession(sessionId: SessionId): Promise<void> {
@@ -136,10 +163,10 @@ export class WorkspaceEntity implements Workspace {
           + `its cwd '${header.cwd}' is not a directory`,
         )
       }
-      if (cwd !== this.record.path) {
+      if (!this.paths.includes(cwd)) {
         throw new Error(
           `cannot attach session '${sessionId}' to workspace '${this.record.path}': `
-          + `its cwd resolves to '${cwd}'`,
+          + `its cwd resolves to '${cwd}', which is not one of ${JSON.stringify(this.paths)}`,
         )
       }
       this.host.rememberSessionPath(sessionId, cwd)
@@ -205,8 +232,9 @@ export class WorkspaceEntity implements Workspace {
     try {
       next = await this.host.table().update(this.id, (current) => {
         const changed = fn(current)
+        const paths = recordPaths(changed)
         const sessionIds = changed.sessionIds.filter(
-          id => this.host.candidateMatches(id, changed.path),
+          id => this.host.candidateMatches(id, paths),
         )
         if (changed === current && sessionIds.length === current.sessionIds.length) {
           throw unchangedSentinel

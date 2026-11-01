@@ -660,3 +660,41 @@
     transition: none;
   }
 }
+
+/* The Workspace directories editor: current directories, then one add row. */
+.folderHint {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.folderList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folderPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderAdd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

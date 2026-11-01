@@ -19,7 +19,7 @@ const CLIENT_SERVICES: Readonly<Record<string, readonly string[]>> = {
     'openSession', 'openWorkspace', 'forkSession', 'connectWorkspace', 'startSession', 'archiveSession', 'unarchiveSession',
     'pickDirectory', 'listDirectory', 'createDirectory',
   ],
-  workspaces: ['create', 'rename', 'delete', 'insertSessionBefore', 'archiveSession', 'unarchiveSession'],
+  workspaces: ['create', 'rename', 'setPaths', 'delete', 'insertSessionBefore', 'archiveSession', 'unarchiveSession'],
 }
 
 const CLIENT_EVENTS = new Set([

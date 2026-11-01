@@ -8,6 +8,7 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
+  WorkspaceSetPathsRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
   WorkspaceInsertBeforeRequest,
@@ -37,6 +38,7 @@ function workspace(
   return {
     workspaceId: wid(id),
     path: `/w/${id}`,
+    paths: [`/w/${id}`],
     title: id,
     sessionIds,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -77,6 +79,10 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     Promise.resolve(remoteOk({ workspace: { ...workspace(String(request.workspaceId)), title: request.title } }))
   onDelete: (_request: WorkspaceDeleteRequest) => Promise<RemoteResult<WorkspaceDeleteValue>> = () =>
     Promise.resolve(remoteOk({ deleted: true }))
+  onSetPaths: (request: WorkspaceSetPathsRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
+    Promise.resolve(remoteOk({
+      workspace: { ...workspace(String(request.workspaceId)), path: request.paths[0] ?? '', paths: [...request.paths] },
+    }))
   onInsertBefore: (
     request: WorkspaceInsertBeforeRequest,
   ) => Promise<RemoteResult<WorkspaceOrderValue>> = request =>
@@ -116,6 +122,11 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   delete(request: WorkspaceDeleteRequest): Promise<RemoteResult<WorkspaceDeleteValue>> {
     this.record('delete', request)
     return this.onDelete(request)
+  }
+
+  setPaths(request: WorkspaceSetPathsRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('setPaths', request)
+    return this.onSetPaths(request)
   }
 
   insertBefore(request: WorkspaceInsertBeforeRequest): Promise<RemoteResult<WorkspaceOrderValue>> {

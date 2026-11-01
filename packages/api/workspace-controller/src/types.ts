@@ -17,8 +17,10 @@ export type { DirectoryEntry, DirectoryListing } from '@deepseek-ai/dsh-host-dir
 /** One durable Workspace projected for browser consumers. */
 export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
-  /** Canonical host directory path. */
+  /** Primary canonical host directory path; Sessions created here run in it. */
   readonly path: string
+  /** Every canonical directory this Workspace owns, primary first. */
+  readonly paths: readonly string[]
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -33,6 +35,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** The requested directory cannot back a Workspace. */
     'workspace/invalid-path': { readonly path: string }
+    /** The requested directory set is empty, unreadable, or owned by another Workspace. */
+    'workspace/path-conflict': { readonly workspaceId: WorkspaceId }
     /** Another Workspace already uses the requested name. */
     'workspace/name-conflict': { readonly name: string }
     /**
@@ -63,7 +67,21 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
 /** Existing directory requested for Workspace adoption. */
 export interface WorkspaceCreateRequest {
+  /** Primary directory; the Workspace's {@link WorkspaceView.path}. */
   readonly path: string
+  /**
+   * Further directories the same Workspace should own. Each must be an
+   * existing directory; the registry canonicalizes them and rejects a
+   * directory another Workspace already owns.
+   */
+  readonly extraPaths?: readonly string[]
+}
+
+/** Replacement directory set for one Workspace. */
+export interface WorkspaceSetPathsRequest {
+  readonly workspaceId: WorkspaceId
+  /** Ordered directories, primary first; at least one. */
+  readonly paths: readonly string[]
 }
 
 /** Created or previously registered Workspace. */

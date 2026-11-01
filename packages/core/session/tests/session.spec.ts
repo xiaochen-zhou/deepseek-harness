@@ -1197,6 +1197,10 @@ describe('Session', () => {
       { header: { ...base, createdAt: '123' }, error: /createdAt must be a non-negative safe integer/ },
       { header: { ...base, cwd: 1 }, error: /header cwd must be a string/ },
       { header: { ...base, cwd: 'relative' }, error: /header cwd must be an absolute path/ },
+      { header: { ...base, workspaceRoots: [] }, error: /workspaceRoots must be a non-empty array/ },
+      { header: { ...base, workspaceRoots: [1] }, error: /workspaceRoots must contain strings/ },
+      { header: { ...base, workspaceRoots: ['relative'] }, error: /workspaceRoots must be absolute paths/ },
+      { header: { ...base, workspaceRoots: ['/projects/a', '/projects/a'] }, error: /workspaceRoots must not repeat/ },
       { header: { ...base, parentSession: 1 }, error: /header parentSession must be a string/ },
       { header: { ...base, isSeeded: 'yes' }, error: /isSeeded must be a boolean/ },
       { header: { ...base, seedLength: 1 }, error: /invalid field "seedLength"/ },
@@ -1481,6 +1485,17 @@ describe('SessionStore', () => {
         meta: meta as NonNullable<CreateSessionOptions['meta']>,
       })).toThrow(error)
     }
+  })
+
+  it('snapshots create meta.workspaceRoots into the header', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('roots'), {
+      meta: { cwd: '/projects/main', workspaceRoots: ['/projects/main', '/projects/shared'] },
+    })
+    expect(session.header.workspaceRoots).toEqual(['/projects/main', '/projects/shared'])
+    expect(ctx.sessions.create(SessionId('no-roots'), { meta: { cwd: '/projects/main' } }).header)
+      .not.toHaveProperty('workspaceRoots')
   })
 
   it('rejects a non-absolute meta.cwd', async () => {

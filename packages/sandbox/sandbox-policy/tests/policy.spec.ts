@@ -7,7 +7,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -22,7 +22,7 @@ async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'dange
   return ctx
 }
 
-function session(id: string, cwd?: string): Session {
+function session(id: string, cwd?: string, workspaceRoots?: readonly string[]): Session {
   const sessionId = SessionId(id)
   return Session.create(sessionId, undefined, {
     version: SESSION_FORMAT_VERSION,
@@ -30,6 +30,7 @@ function session(id: string, cwd?: string): Session {
     createdAt: 0,
     isSeeded: false,
     ...cwd === undefined ? {} : { cwd },
+    ...workspaceRoots === undefined ? {} : { workspaceRoots },
   })
 }
 
@@ -119,6 +120,41 @@ describe('SandboxPolicyService', () => {
       mode: 'workspace-write',
       workspaceRoot: '/fallback',
     })
+  })
+
+  it('extends the session boundary with every root the session snapshotted', async () => {
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' })
+    const multi = session('sess-multi', '/projects/main', ['/projects/main', '/projects/shared', '/projects/docs'])
+    expect(ctx.sandboxPolicy.resolve({ session: multi })).toEqual({
+      mode: 'workspace-write',
+      workspaceRoot: '/projects/main',
+      additionalWritableRoots: ['/projects/shared', '/projects/docs'],
+      sessionId: 'sess-multi',
+    })
+  })
+
+  it('keeps deployment roots ahead of session roots and drops repeats', async () => {
+    const ctx = await mounted({
+      mode: 'workspace-write',
+      workspaceRoot: '/fallback',
+      additionalWritableRoots: ['/projects/shared', '/projects/tooling'],
+    })
+    const multi = session('sess-overlap', '/projects/main', ['/projects/main', '/projects/shared', '/projects/docs'])
+    const policy = ctx.sandboxPolicy.resolve({ session: multi })
+    expect(policy.additionalWritableRoots).toEqual(['/projects/shared', '/projects/tooling', '/projects/docs'])
+    expect(Object.isFrozen(policy.additionalWritableRoots)).toBe(true)
+  })
+
+  it('renders every session directory in the policy context', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: '/fallback' })
+    onTestFinished(() => ctx.fiber.dispose())
+    const multi = session('sess-render', '/projects/main', ['/projects/main', '/projects/shared'])
+    const text = await policyContext(ctx, multi)
+    expect(text).toContain('under the session workspace: "/projects/main"')
+    expect(text).toContain('Additional writable directories: ["/projects/shared"]')
   })
 
   it.skipIf(process.platform === 'win32')('preserves symlink-sensitive session cwd for its enforcing provider', async () => {

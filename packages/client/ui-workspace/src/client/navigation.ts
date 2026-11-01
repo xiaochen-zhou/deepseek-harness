@@ -238,7 +238,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const blank = sessions.ids.find((id) => {
       const summary = sessions.byId[id]
       const listed = summary?.projectionValues?.agentPreset
-      return summary !== undefined && summary.blank && summary.cwd === workspace.path
+      return summary !== undefined && summary.blank && summary.cwd !== undefined
+        && workspace.paths.includes(summary.cwd)
         && workspace.sessionIds.includes(id) && !archived.includes(id)
         && (options.agentPreset === undefined || typeof listed !== 'string' || listed === options.agentPreset)
     })
@@ -478,7 +479,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
     this.restorationNavigation = navigation
     let sessionId: SessionId | undefined
-    if (summary !== undefined && workspace !== undefined && summary.cwd === workspace.path
+    if (summary !== undefined && workspace !== undefined && summary.cwd !== undefined
+      && workspace.paths.includes(summary.cwd)
       && !workspaces.archivedSessionIds.includes(summary.id)) {
       sessionId = await this.restoreBlank(workspace.workspaceId, summary.id)
     }

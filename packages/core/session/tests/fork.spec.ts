@@ -77,7 +77,7 @@ describe('SessionStore.fork', () => {
 
   it('forks the latest completed boundary by default into detached frozen seed events', async () => {
     const { ctx, sessions } = await setup()
-    const source = ctx.sessions.create(SessionId('parent'), { meta: { cwd: '/workspace' } })
+    const source = ctx.sessions.create(SessionId('parent'), { meta: { cwd: '/workspace', workspaceRoots: ['/workspace', '/shared'] } })
     appendClosedTurn(source, 1, 'hello')
 
     const child = sessions.fork(SessionId('parent'), undefined, SessionId('child'))
@@ -95,6 +95,7 @@ describe('SessionStore.fork', () => {
     expect(child.header).toMatchObject({
       id: SessionId('child'),
       cwd: '/workspace',
+      workspaceRoots: ['/workspace', '/shared'],
       isSeeded: true,
     })
     expect(child.inheritedEventCount).toBe(source.seq)

@@ -75,6 +75,26 @@ describe('Session creation failures', () => {
     await ctx.fiber.dispose()
   })
 
+  it('creates in a Workspace primary directory with every owned directory as writable roots', async () => {
+    const ctx = await baseContext()
+    const workspace = {
+      id: 'workspace-multi' as WorkspaceId,
+      path: '/main',
+      paths: ['/main', '/shared'],
+      attachSession: () => Promise.resolve(),
+    } as unknown as Workspace
+    ctx.provide('workspaceRegistry', { get: () => workspace, list: () => [workspace] } as never)
+    const createSession = vi.fn(publishedSession(ctx, SessionId('session-multi')))
+    const controller = new SessionCommandController(ctx, controllerAgents(ctx, { createSession }), '/default-workspace')
+
+    await controller.create({ workspaceId: workspace.id })
+
+    const request = createSession.mock.calls[0]?.[0]
+    expect(request?.cwd).toBe('/main')
+    expect(request?.workspaceRoots).toEqual(['/main', '/shared'])
+    await ctx.fiber.dispose()
+  })
+
   it('maps missing Workspaces and attachment failures', async () => {
     const missing = await baseContext()
     missing.provide('workspaceRegistry', { get: () => undefined, list: () => [] } as never)
@@ -92,6 +112,7 @@ describe('Session creation failures', () => {
     const workspace = {
       id: 'workspace-1' as WorkspaceId,
       path: '/workspace',
+      paths: ['/workspace'],
       attachSession: () => Promise.reject(new Error('read-only workspace')),
     } as unknown as Workspace
     failed.provide('workspaceRegistry', {

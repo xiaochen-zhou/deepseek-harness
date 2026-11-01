@@ -117,6 +117,21 @@ function validateSessionHeader(id: SessionId, input: unknown): SessionHeader {
       throw new Error(`session header cwd must be an absolute path, got "${record.cwd}"`)
     }
   }
+  if (record.workspaceRoots !== undefined) {
+    const roots = record.workspaceRoots
+    if (!Array.isArray(roots) || roots.length === 0) {
+      throw new Error('session header workspaceRoots must be a non-empty array')
+    }
+    for (const root of roots) {
+      if (typeof root !== 'string') throw new Error('session header workspaceRoots must contain strings')
+      if (!isAbsolute(root)) {
+        throw new Error(`session header workspaceRoots must be absolute paths, got "${root}"`)
+      }
+    }
+    if (new Set(roots).size !== roots.length) {
+      throw new Error('session header workspaceRoots must not repeat a path')
+    }
+  }
   if (record.parentSession !== undefined && typeof record.parentSession !== 'string') {
     throw new Error('session header parentSession must be a string')
   }
@@ -1194,6 +1209,7 @@ export class SessionStore extends Service {
       id: sessionId,
       createdAt: meta?.createdAt ?? Date.now(),
       ...meta?.cwd === undefined ? {} : { cwd: meta.cwd },
+      ...meta?.workspaceRoots === undefined ? {} : { workspaceRoots: [...meta.workspaceRoots] },
       ...meta?.parentSession === undefined ? {} : { parentSession: meta.parentSession },
       isSeeded: meta?.isSeeded ?? false,
       ...meta?.origin === undefined ? {} : { origin: meta.origin },
@@ -1414,6 +1430,9 @@ export class SessionStore extends Service {
       inheritedEventCount: SessionLogOffset(resolved === undefined ? 0 : resolved + 1),
       meta: {
         ...liveSource.header.cwd !== undefined ? { cwd: liveSource.header.cwd } : {},
+        ...liveSource.header.workspaceRoots === undefined
+          ? {}
+          : { workspaceRoots: liveSource.header.workspaceRoots },
         isSeeded: true,
       },
     })

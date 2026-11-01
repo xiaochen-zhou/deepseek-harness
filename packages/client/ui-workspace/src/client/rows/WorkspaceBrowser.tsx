@@ -914,6 +914,7 @@ export function WorkspaceBrowser({
   notifyArchivedNotOpenable,
   renameWorkspace, useWorkspaceActionRequest, settleWorkspaceAction,
   deleteWorkspace,
+  setWorkspacePaths,
   insertWorkspaceBefore,
   unarchiveSession,
   createWorkspace,
@@ -1431,6 +1432,7 @@ export function WorkspaceBrowser({
 
       {workspaceActionRequest !== null && <WorkspaceDialogs key={`${workspaceActionRequest.action}/${workspaceActionRequest.workspaceId}`}
         request={workspaceActionRequest} workspaces={workspaces} renameWorkspace={renameWorkspace} deleteWorkspace={deleteWorkspace}
+        setWorkspacePaths={setWorkspacePaths}
         settleWorkspaceAction={settleWorkspaceAction} t={t} />}
     </div>
   )
