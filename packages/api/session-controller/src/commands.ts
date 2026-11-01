@@ -449,6 +449,24 @@ export class SessionCommandController {
         agent.inbox.remove(request.itemId)
         agent.steer(message)
         break
+      case 'move': {
+        const pending = target === 'next-turn' ? agent.inbox.nextTurn : agent.inbox.nextStep
+        const from = pending.findIndex(item => item.id === request.itemId)
+        const before = request.action.before
+        // Dropping an item onto itself asks for no change.
+        if (before === request.itemId) break
+        if (before !== null && !pending.some(item => item.id === before)) {
+          throw new RemoteError('session/queue-item-not-found', 'queued item to place before is not pending', { itemId: before })
+        }
+        // Positions are computed against the list without the moved item, so a
+        // downward move lands where the drop marker showed.
+        const remaining = pending.filter(item => item.id !== request.itemId)
+        const insertAt = before === null ? remaining.length : remaining.findIndex(item => item.id === before)
+        if (insertAt === from) break
+        agent.inbox.splice(target, from, 1, [])
+        agent.inbox.splice(target, insertAt, 0, [message])
+        break
+      }
       /* v8 ignore next 2 -- closed-union exhaustiveness guard */
       default:
         assertNever(request.action, 'queue action')

@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-01-queue-drag-reorder.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-01-queue-drag-reorder.md
+/agent-note-queued-messages-reorder-by-dragging:
+  en: 66b2e38ea0a9e8ff
+  zh: 8c9704d97490a122
+/agent-note-queued-messages-reorder-by-dragging/problem:
+  en: 18340c4b0891b864
+  zh: 1a3a7d55cb9a0ffb
+/agent-note-queued-messages-reorder-by-dragging/decision:
+  en: 91ee62899a5e6b8f
+  zh: f2e8dc0eb564cb5c
+/agent-note-queued-messages-reorder-by-dragging/alternatives-considered:
+  en: e38487e7755a5721
+  zh: 90fbd71cfbfdef90
+/agent-note-queued-messages-reorder-by-dragging/consequences:
+  en: cd6daa30b9dac1c3
+  zh: b1e4c1de58349a75
+/agent-note-queued-messages-reorder-by-dragging/testing:
+  en: a1775a095c5364f3
+  zh: 62ea4087c726bee1

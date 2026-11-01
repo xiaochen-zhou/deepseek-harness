@@ -5,8 +5,8 @@ import type { PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconCloseOutlineRegular,
-  FileTypeIcon, fileSizeText, IconEditOutlineRegular, InlineEditor, IconQueueOutlineRegular, IconSendOutlineRegular,
-  IconTrashOutlineRegular, Tooltip,
+  IconDragHandleOutlineRegular, FileTypeIcon, fileSizeText, IconEditOutlineRegular, InlineEditor,
+  IconQueueOutlineRegular, IconSendOutlineRegular, IconTrashOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -125,6 +125,9 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
   const queueMutable = useSession(s => s.subagent === null || s.subagent.address.mode === 'continuable')
   const [editing, setEditing] = useState<{ id: MessageId; text: string } | null>(null)
   const [busy, setBusy] = useState<MessageId | null>(null)
+  // The row being dragged and the row it would land against, so the drop
+  // marker and the committed order agree.
+  const [drag, setDrag] = useState<{ id: MessageId; over: { id: MessageId; after: boolean } | null } | null>(null)
   const [collapsed, setCollapsed] = useState(true)
   const listId = useId()
 
@@ -136,6 +139,9 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
   if (rowCount === 0) return null
 
   const interactionActive = queueMutable && (editing !== null || busy !== null)
+  // Reordering needs a visible list of at least two mutable rows and no open
+  // edit, because a dragging row cannot also be the one being edited.
+  const draggable = queueMutable && rowCount > 1 && editing === null && busy === null
   const expanded = !collapsed || interactionActive
   const listVisible = rowCount === 1 || expanded
 
@@ -154,6 +160,17 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
     } finally {
       setBusy(current => current === itemId ? null : current)
     }
+  }
+
+  /** Pending item a drop on `target` places the dragged row before. */
+  const dropBefore = (target: MessageId, after: boolean): MessageId | null => {
+    if (!after) return target
+    const index = queue.findIndex(row => row.id === target)
+    return queue[index + 1]?.id ?? null
+  }
+
+  const moveRow = async (itemId: MessageId, before: MessageId | null): Promise<void> => {
+    if (await applyAction(itemId, { kind: 'move', before }, t('queue.moveFailed'))) setDrag(null)
   }
 
   const saveEdit = async (): Promise<void> => {
@@ -192,7 +209,31 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
             const attachments = queueAttachments(row.content)
             const text = textOf(row.content)
             return (
-              <li key={row.id} className={css.row}>
+              <li
+                key={row.id}
+                className={`${css.row} ${drag?.id === row.id ? css.dragging : ''} ${
+                  drag?.over?.id === row.id ? drag.over.after ? css.dropAfter : css.dropBefore : ''}`}
+                draggable={draggable}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', row.id)
+                  setDrag({ id: row.id, over: null })
+                }}
+                onDragEnd={() => { setDrag(null) }}
+                onDragOver={(event) => {
+                  if (drag === null || drag.id === row.id) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  setDrag({ ...drag, over: { id: row.id, after: event.clientY > rect.top + rect.height / 2 } })
+                }}
+                onDrop={(event) => {
+                  if (drag === null || drag.id === row.id) return
+                  event.preventDefault()
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  void moveRow(drag.id, dropBefore(row.id, event.clientY > rect.top + rect.height / 2))
+                }}
+              >
                 {/* Single-item strip has no count header, so the row itself carries the queue glyph. */}
                 {rowCount === 1 && <span className={css.lead} aria-hidden><IconQueueOutlineRegular /></span>}
                 {editing?.id === row.id
@@ -207,6 +248,9 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                   )
                   : (
                     <>
+                      {draggable && (
+                        <span className={css.handle} aria-hidden><IconDragHandleOutlineRegular size={14} /></span>
+                      )}
                       {attachments.length > 0 && (
                         <span className={css.attachments}>
                           {attachments.map((item, index) => item.type === 'image'

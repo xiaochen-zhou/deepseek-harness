@@ -150,6 +150,99 @@ function imageRow(id: string, refId: string, text = ''): UserMessage {
 }
 
 describe('QueueDock', () => {
+  function dragKit(queue: UserMessage[]) {
+    const initial = snapshotWith(queue)
+    const source = liveSession(initial)
+    const injected = kitFor(initial)
+    const view = render(<QueueDock {...injected} useSession={source.useSession} useProjection={source.useProjection} />)
+    fireEvent.click(view.getByRole('button', { name: /3 条排队消息/ }))
+    const rows = (): HTMLElement[] => [...view.container.querySelectorAll<HTMLElement>('[data-queue-dock] li')]
+    return { view, injected, rows }
+  }
+
+  /** A DataTransfer stand-in: jsdom drag events carry none. */
+  function transfer() {
+    return { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: vi.fn() } as unknown as DataTransfer
+  }
+
+  /** jsdom drag events carry no DataTransfer and testing-library drops clientY, so build them. */
+  function dragEvent(type: 'dragstart' | 'dragend' | 'dragover' | 'drop', clientY = 0): MouseEvent {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY })
+    Object.defineProperty(event, 'dataTransfer', { value: transfer() })
+    return event
+  }
+
+  function rect(top: number, height: number): DOMRect {
+    return { top, height, bottom: top + height, left: 0, right: 100, width: 100, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+  }
+
+  it('reorders queued rows by dropping one against another', () => {
+    const { injected, rows } = dragKit([row('a', 'first'), row('b', 'second'), row('c', 'third')])
+    const [first, second, third] = rows()
+    if (first === undefined || second === undefined || third === undefined) throw new Error('missing rows')
+
+    // Dropping above a row places the dragged row before it.
+    vi.spyOn(first, 'getBoundingClientRect').mockReturnValue(rect(0, 20))
+    fireEvent(third, dragEvent('dragstart'))
+    fireEvent(first, dragEvent('dragover', 4))
+    fireEvent(first, dragEvent('drop', 4))
+    expect(injected.updateQueue).toHaveBeenLastCalledWith(iid('c'), { kind: 'move', before: iid('a') })
+
+    // Dropping below a row places the dragged row before the row after it.
+    fireEvent(first, dragEvent('dragstart'))
+    fireEvent(second, dragEvent('dragover', 18))
+    fireEvent(second, dragEvent('drop', 18))
+    expect(injected.updateQueue).toHaveBeenLastCalledWith(iid('a'), { kind: 'move', before: iid('c') })
+
+    // Dropping below the last row appends it.
+    fireEvent(second, dragEvent('dragstart'))
+    vi.spyOn(third, 'getBoundingClientRect').mockReturnValue(rect(40, 20))
+    fireEvent(third, dragEvent('dragover', 70))
+    fireEvent(third, dragEvent('drop', 70))
+    expect(injected.updateQueue).toHaveBeenLastCalledWith(iid('b'), { kind: 'move', before: null })
+  })
+
+  it('ignores drops without a drag and drops onto the dragged row', () => {
+    const { injected, rows } = dragKit([row('a', 'first'), row('b', 'second'), row('c', 'third')])
+    const [first, second] = rows()
+    if (first === undefined || second === undefined) throw new Error('missing rows')
+    // No drag started: the drop handlers report nothing.
+    fireEvent(second, dragEvent('dragover', 1))
+    fireEvent(second, dragEvent('drop', 1))
+    expect(injected.updateQueue).not.toHaveBeenCalled()
+    // A row hovered over and dropped onto itself stays put.
+    fireEvent(first, dragEvent('dragstart'))
+    fireEvent(first, dragEvent('dragover', 1))
+    fireEvent(first, dragEvent('drop', 1))
+    fireEvent.dragEnd(first)
+    expect(injected.updateQueue).not.toHaveBeenCalled()
+  })
+
+  it('reports a refused move and keeps the drag state', async () => {
+    const updateQueue = vi.fn(() => Promise.reject(new Error('gone')))
+    const queue = [row('a', 'first'), row('b', 'second'), row('c', 'third')]
+    const initial = snapshotWith(queue)
+    const source = liveSession(initial)
+    const view = render(
+      <QueueDock
+        {...kitFor(initial, { updateQueue })}
+        useSession={source.useSession}
+        useProjection={source.useProjection}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: /3 条排队消息/ }))
+    const elements = [...view.container.querySelectorAll<HTMLElement>('[data-queue-dock] li')]
+    const first = elements[0]
+    const second = elements[1]
+    if (first === undefined || second === undefined) throw new Error('missing rows')
+    vi.spyOn(second, 'getBoundingClientRect').mockReturnValue(rect(0, 20))
+    fireEvent(first, dragEvent('dragstart'))
+    fireEvent(second, dragEvent('drop', 1))
+    await act(async () => {})
+    expect(updateQueue).toHaveBeenCalledWith(iid('a'), { kind: 'move', before: iid('b') })
+  })
+
+
   it('keeps the same quote preview when a queued echo hands off to Host content', () => {
     const requestId = 'quote-handoff' as SessionSnapshot['pendingSubmissions'][number]['requestId']
     const content = [{ type: 'text' as const, text: '> @literal /review' }]

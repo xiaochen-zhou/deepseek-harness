@@ -246,3 +246,30 @@
   cursor: default;
   opacity: 0.45;
 }
+
+/* Drag reordering: the handle marks the row as movable, and the marker line
+   shows where the dropped row lands. */
+.handle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: grab;
+}
+
+.row[draggable='true']:active .handle {
+  cursor: grabbing;
+}
+
+.dragging {
+  opacity: 0.6;
+}
+
+.dropBefore {
+  box-shadow: inset 0 2px 0 var(--dsw-alias-state-business-primary);
+}
+
+.dropAfter {
+  box-shadow: inset 0 -2px 0 var(--dsw-alias-state-business-primary);
+}
