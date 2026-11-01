@@ -83,6 +83,13 @@ export interface ComposerKeyboard {
    * button is the same operation applied to the whole queue).
    */
   steerQueue(): void
+  /**
+   * Recall a submitted prompt into the draft, replacing it.
+   * @param direction - 'previous' walks back into older prompts, 'next' forward.
+   * @returns whether the gesture was consumed; false leaves the caret to move
+   *   (a draft under edit, or no history at all).
+   */
+  history(direction: 'previous' | 'next'): boolean
   /** Insert pasted plain text over the current editor selection (reference-placeholder-sanitized). */
   paste(text: string): void
   /**

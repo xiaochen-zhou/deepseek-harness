@@ -44,6 +44,55 @@ describe('keymap keydown routing', () => {
     expect(second.hasAttribute('data-composer-composing')).toBe(false)
   })
 
+  it('offers the arrow keys to prompt recall after the menu passes', () => {
+    const editor = createEditor({ namespace: 'keymap-recall', onError: (e) => { throw e } })
+    const root = document.createElement('div')
+    root.contentEditable = 'true'
+    document.body.appendChild(root)
+    editor.setRootElement(root)
+    registerPlainText(editor)
+    onTestFinished(() => {
+      editor.setRootElement(null)
+      root.remove()
+    })
+    const history = vi.fn((_direction: 'previous' | 'next') => true)
+    const unregister = registerComposerKeymap(editor, {
+      arbitrate: () => 'pass',
+      space: () => false,
+      dismissPopup: () => {},
+      canSubmit: () => true,
+      submit: () => {},
+      history,
+      intakeFiles: () => {},
+      pasteText: () => {},
+    })
+    onTestFinished(unregister)
+    fireEvent.keyDown(root, { key: 'ArrowUp' })
+    expect(history).toHaveBeenCalledWith('previous')
+    fireEvent.keyDown(root, { key: 'ArrowDown' })
+    expect(history).toHaveBeenLastCalledWith('next')
+    // Shift/Alt/Meta arrows belong to the caret, and an open menu keeps its claim.
+    fireEvent.keyDown(root, { key: 'ArrowUp', shiftKey: true })
+    fireEvent.keyDown(root, { key: 'ArrowUp', altKey: true })
+    expect(history).toHaveBeenCalledTimes(2)
+    unregister()
+    const claiming = vi.fn(() => 'consumed' as const)
+    const claimedHistory = vi.fn(() => true)
+    const stop = registerComposerKeymap(editor, {
+      arbitrate: claiming,
+      space: () => false,
+      dismissPopup: () => {},
+      canSubmit: () => true,
+      submit: () => {},
+      history: claimedHistory,
+      intakeFiles: () => {},
+      pasteText: () => {},
+    })
+    onTestFinished(stop)
+    fireEvent.keyDown(root, { key: 'ArrowUp' })
+    expect(claimedHistory).not.toHaveBeenCalled()
+  })
+
   it('routes Enter to the keymap submit handler', () => {
     const editor = createEditor({ namespace: 'keymap-routing', onError: (e) => { throw e } })
     const root = document.createElement('div')

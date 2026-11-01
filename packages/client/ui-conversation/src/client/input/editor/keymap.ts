@@ -33,6 +33,12 @@ export interface ComposerKeymapHandlers {
   space(): boolean
   /** Dismiss the popupSelect shell (Escape layering: an open overlay closes first). */
   dismissPopup(): void
+  /**
+   * Recall a submitted prompt when the caret would otherwise just move.
+   * @param direction - 'previous' for older prompts, 'next' for newer ones.
+   * @returns whether the keystroke was consumed.
+   */
+  history?(direction: 'previous' | 'next'): boolean
   /** Whether Enter may submit right now (locked/busy states refuse). */
   canSubmit(): boolean
   /** Plain Enter submits; exactly Ctrl+Enter or Cmd+Enter selects accelerated delivery. */
@@ -204,6 +210,17 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     return false
   }
 
+  // Arrows first give the open menu its claim; a passing key then offers the
+  // recall walk, and only an unclaimed recall falls through to the caret.
+  const recall = (key: ArbitrateKey, direction: 'previous' | 'next') => (event: KeyboardEvent | null): boolean => {
+    if (arrow(key)(event)) return true
+    if (event === null || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false
+    if (isComposingEvent(event, recentlyComposing)) return false
+    if (handlers.history?.(direction) !== true) return false
+    event.preventDefault()
+    return true
+  }
+
   return mergeRegister(
     editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener('compositionstart', onCompositionStart)
@@ -224,8 +241,8 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(MOVE_TO_END, event => movePastQuote(editor, event), COMMAND_PRIORITY_CRITICAL),
     editor.registerUpdateListener(syncComposition),
-    editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow('up'), COMMAND_PRIORITY_CRITICAL),
-    editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow('down'), COMMAND_PRIORITY_CRITICAL),
+    editor.registerCommand(KEY_ARROW_UP_COMMAND, recall('up', 'previous'), COMMAND_PRIORITY_CRITICAL),
+    editor.registerCommand(KEY_ARROW_DOWN_COMMAND, recall('down', 'next'), COMMAND_PRIORITY_CRITICAL),
     // Tab settles the highlighted completion and passes without one, keeping
     // native focus traversal; Shift+Tab leaves the menu like Escape whenever it
     // is open, highlight or not, so the two Tab gestures never disagree about

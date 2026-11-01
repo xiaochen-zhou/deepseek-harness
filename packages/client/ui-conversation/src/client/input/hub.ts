@@ -57,6 +57,8 @@ interface ConversationAttachmentFace {
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
   private readonly shells = new WeakMap<SessionBinding, SessionInputShell>()
+  /** Submitted prompts per Session, oldest first: the composer's ↑ recall source. */
+  private readonly promptHistory = new WeakMap<SessionBinding, string[]>()
 
   /**
    * @param ctx - client root context (services resolved lazily per call — boot order stays free).
@@ -134,6 +136,16 @@ export class InputHub implements SessionInputResolver {
           && this.conversation().blocks.storeFor(session.sessionId).getSnapshot() === undefined
       },
       steerQueue: () => { void this.steerQueue(session, shell) },
+      history: {
+        entries: () => this.promptHistory.get(binding) ?? [],
+        record: (text) => {
+          const entries = this.promptHistory.get(binding) ?? []
+          // Repeating the latest prompt immediately does not grow the walk.
+          if (entries[entries.length - 1] === text) return
+          entries.push(text)
+          this.promptHistory.set(binding, entries)
+        },
+      },
       commandAttachments: {
         serialize: async (ids) => {
           const result = await this.conversation().serializeDraftAttachments(ids)
