@@ -7,6 +7,12 @@ import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-
 import type { WorkspaceActionRequest, WorkspaceBrowserProps } from '../contract/slots.ts'
 import css from './WorkspaceBrowser.module.css'
 
+/** Last path segment of a directory, for a row that shows the full path on hover. */
+function folderName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(part => part !== '')
+  return parts[parts.length - 1] ?? path
+}
+
 type Props = Pick<
   WorkspaceBrowserProps,
   'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction' | 'requestWorkspaceAction' | 't'
@@ -239,10 +245,11 @@ export function WorkspaceDialogs({
       </div>
       <div className={css.editLabel}>{t('edit.sourceFolders')}</div>
       <ul className={css.folderList}>
-        {folderDraft.map(path => (
+        {folderDraft.map((path, index) => (
           <li key={path} className={css.folderRow}>
             <IconFolderOpenRegular size={15} />
-            <span className={css.folderPath} title={path}>{path}</span>
+            <span className={css.folderName} title={path}>{folderName(path)}</span>
+            {index === 0 && <span className={css.folderPrimary}>{t('edit.primary')}</span>}
             <button
               type="button"
               className={css.folderRemove}
