@@ -503,7 +503,32 @@ describe('QueueDock', () => {
     })
   })
 
-  it('renders active actions and disables editing for mixed-content rows', () => {
+  it('edits a row that also carries an image, keeping the attachment', async () => {
+    const updateQueue = vi.fn(() => Promise.resolve())
+    const snap = snapshotWith([imageRow('i-img', 'att-9', '带图消息')])
+    const source = liveSession(snap)
+    const { container, getByRole } = render(
+      <QueueDock {...kitFor(snap, { updateQueue })} useSession={source.useSession} useProjection={source.useProjection} />,
+    )
+    const edit = container.querySelector('[aria-label="编辑排队消息"]') as HTMLButtonElement
+    expect(edit.disabled).toBe(false)
+    expect(edit.getAttribute('title')).toBeNull()
+
+    fireEvent.click(edit)
+    const editor = getByRole('textbox', { name: '编辑排队消息' })
+    fireEvent.change(editor, { target: { value: '改过的文字' } })
+    fireEvent.keyDown(editor, { key: 'Enter' })
+
+    await waitFor(() => {
+      // The command carries text only; the host keeps the image block in place.
+      expect(updateQueue).toHaveBeenCalledWith(iid('i-img'), {
+        kind: 'edit',
+        content: [{ type: 'text', text: '改过的文字' }],
+      })
+    })
+  })
+
+  it('renders active actions for every queued row', () => {
     const snap = snapshotWith([
       row('i-1', '第一条排队消息'),
       row('i-2', null, 'image [image]'),
@@ -520,9 +545,7 @@ describe('QueueDock', () => {
     expect(container.querySelectorAll('[aria-label="删除排队消息"]')).toHaveLength(2)
     expect(container.querySelectorAll('[aria-label="插话发送"]')).toHaveLength(2)
     expect((container.querySelectorAll('[aria-label="编辑排队消息"]')[0] as HTMLButtonElement).disabled).toBe(false)
-    expect((container.querySelectorAll('[aria-label="编辑排队消息"]')[1] as HTMLButtonElement).disabled).toBe(true)
-    expect(container.querySelectorAll('[aria-label="编辑排队消息"]')[1]?.getAttribute('title'))
-      .toBe('包含非文本内容，暂不支持编辑')
+    expect((container.querySelectorAll('[aria-label="编辑排队消息"]')[1] as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('renders queued image thumbnails from durable references beside the text preview', async () => {

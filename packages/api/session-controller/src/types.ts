@@ -141,7 +141,11 @@ export interface ModelCatalog {
 export type QueueAction =
   | {
     readonly kind: 'edit'
-    /** Non-empty text-only replacement content. */
+    /**
+     * Replacement text for the item's text blocks. Image blocks the queued
+     * message already carries stay in place; clearing the text of an
+     * image-only message leaves just the attachments.
+     */
     readonly content: readonly TextBlock[]
   }
   | { readonly kind: 'remove' }

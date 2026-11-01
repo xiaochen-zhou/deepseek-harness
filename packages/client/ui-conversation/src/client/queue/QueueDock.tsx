@@ -21,9 +21,9 @@ const QUEUE_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {
   trimWhitespace: true,
 }
 
-function textOf(content: InboxState['next-turn'][number]['content']): string | null {
-  if (!content.every(block => block.type === 'text')) return null
-  return content.map(block => block.text).join('')
+/** Text of one queued message; attachments it also carries survive an edit. */
+function textOf(content: InboxState['next-turn'][number]['content']): string {
+  return content.filter(block => block.type === 'text').map(block => block.text).join('')
 }
 
 /** Queue operations injected by the session-scoped registration. */
@@ -264,17 +264,14 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
                     )
                     : (
                       <>
-                        <Tooltip portal label={t('queue.edit')} side="bottom" delayMs={500} disabled={text === null}>
+                        <Tooltip portal label={t('queue.edit')} side="bottom" delayMs={500}>
                           <button
                             type="button"
                             className={css.action}
                             aria-label={t('queue.edit')}
-                            // Disabled buttons fire no hover events, so the
-                            // unsupported hint stays a native title.
-                            title={text === null ? t('queue.edit.unsupported') : undefined}
-                            disabled={busy !== null || text === null}
+                            disabled={busy !== null}
                             onClick={() => {
-                              if (text !== null) setEditing({ id: row.id, text: text })
+                              setEditing({ id: row.id, text })
                             }}
                           >
                             <IconEditOutlineRegular size={14} />
