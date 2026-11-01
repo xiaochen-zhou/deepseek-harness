@@ -135,6 +135,7 @@ export function installDraftKeymap(
       if (gate.current.machineBusy || gate.current.locked) return false
       return keyboard.space()
     },
+    history: direction => keyboard.history(direction),
     dismissPopup: () => { keyboard.dismissPopup() },
     canSubmit: () => !gate.current.locked && !gate.current.machineBusy,
     submit: (accelerated) => {

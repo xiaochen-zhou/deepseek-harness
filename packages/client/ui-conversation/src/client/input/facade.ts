@@ -29,6 +29,17 @@ import { resolveDraftInput, snapshotDraft } from '../draft.ts'
 import { DraftEditorRuntime } from './editor/runtime.ts'
 import type { EditorProjection } from './editor/projection.ts'
 
+/**
+ * Submitted-prompt history the composer recalls with the arrow keys: the
+ * Session's own record, newest last, excluding blank drafts.
+ */
+export interface ComposerHistory {
+  /** @returns every recorded prompt, oldest first. */
+  entries(): readonly string[]
+  /** @param text - the draft that was submitted; blank drafts are not recorded. */
+  record(text: string): void
+}
+
 /** Popup face the shell needs (dismissal only; typed structurally to avoid a value import). */
 export interface PopupDismissFace {
   dismiss(): void
@@ -57,6 +68,8 @@ export interface SessionInputDeps {
    * order (the empty-draft accelerated-Enter gesture); absent = unsupported.
    */
   steerQueue?: (() => void) | undefined
+  /** Submitted-prompt history for the arrow-key recall gesture; absent = no recall. */
+  history?: ComposerHistory | undefined
   /**
    * The plain-message sink (send choreography / materialize fork — the hub owns it).
    * `accept` settles the message as accepted at once; the sink calls it when
@@ -167,6 +180,12 @@ export class SessionInputShell implements SessionInput {
   private draftSnapshotCache: { revision: number; value: DraftSnapshot } | undefined
   private attachmentIds: readonly DraftAttachmentId[] = []
   private disposed = false
+  /** Position in the recall walk; null means the draft is the operator's own. */
+  private historyCursor: number | null = null
+  /** The operator's own draft, restored when the walk returns past the newest prompt. */
+  private historyDraft = ''
+  /** Text this shell last wrote for the walk, so its own write does not cancel it. */
+  private historyApplied: string | null = null
   /** Conversation store writer for the current semantic document. */
   private persistDraft: ((draft: DraftSnapshot) => void) | undefined
   /** A restored draft's command token waiting for the trigger pipeline, with the revision its restore produced. */
@@ -201,6 +220,9 @@ export class SessionInputShell implements SessionInput {
     // with content so a snapshot-built span (apply.ts) stays CAS-valid across
     // caret motion and subscribers do not re-render per caret move.
     if (projectionContentChanged(prev, this.projection)) {
+      // Any edit that is not the walk itself ends the walk: the operator took
+      // the draft over, and ↑ must move the caret rather than jump history.
+      if (this.projection.clipboardText !== this.historyApplied) this.historyCursor = null
       this.rev += 1
       this.dispatchRun(({ type: 'draft-changed', command: this.projection.command }))
     }
@@ -407,10 +429,14 @@ export class SessionInputShell implements SessionInput {
       this.notify('error', this.deps.commandAttachments.unsupportedNotice(before.claim?.token ?? before.draft))
       return
     }
+    const submitted = this.projection.clipboardText
+    if (submitted.trim() !== '') this.deps.history?.record(submitted)
+    this.historyCursor = null
+    this.historyApplied = null
     this.dispatchRun({
       type: 'enter',
       mode,
-      draft: this.projection.clipboardText,
+      draft: submitted,
       occurrences: [...this.projection.occurrences],
       quotes: [...this.projection.quotes],
       attachmentIds: [...this.attachmentIds],
@@ -440,6 +466,50 @@ export class SessionInputShell implements SessionInput {
    */
   steerQueue(): void {
     this.deps.steerQueue?.()
+  }
+
+  /**
+   * Walk the Session's submitted prompts, writing each one into the draft.
+   * Entering the walk needs an empty draft; leaving it past the newest prompt
+   * restores whatever the operator had typed before.
+   * @param direction - 'previous' for older prompts, 'next' for newer ones.
+   * @returns whether the gesture was consumed.
+   */
+  history(direction: 'previous' | 'next'): boolean {
+    if (this.disposed || frozen(this.snapshot.phase)) return false
+    const entries = this.deps.history?.entries() ?? []
+    if (entries.length === 0) return false
+    if (direction === 'previous') {
+      if (this.historyCursor === null) {
+        if (this.projection.clipboardText.trim() !== '') return false
+        this.historyDraft = this.projection.clipboardText
+        this.historyCursor = entries.length - 1
+      } else if (this.historyCursor > 0) {
+        this.historyCursor -= 1
+      }
+      this.recallHistory(entries[this.historyCursor] ?? '')
+      return true
+    }
+    if (this.historyCursor === null) return false
+    if (this.historyCursor < entries.length - 1) {
+      this.historyCursor += 1
+      this.recallHistory(entries[this.historyCursor] ?? '')
+      return true
+    }
+    this.historyCursor = null
+    const draft = this.historyDraft
+    this.historyApplied = draft
+    this.historyDraft = ''
+    this.draftEditor.setDraft(draft)
+    this.focus()
+    return true
+  }
+
+  /** @param text - prompt to write into the draft as part of the recall walk. */
+  private recallHistory(text: string): void {
+    this.historyApplied = text
+    this.draftEditor.setDraft(text)
+    this.focus()
   }
 
   /**

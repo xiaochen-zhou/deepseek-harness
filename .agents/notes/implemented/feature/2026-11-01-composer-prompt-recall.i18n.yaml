@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-01-composer-prompt-recall.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-01-composer-prompt-recall.md
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys:
+  en: 23ad02fd6d672976
+  zh: 29ae6cbc33a5fa80
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys/problem:
+  en: b4b6b7d4c0e7a11c
+  zh: ebf1eee8a1273733
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys/decision:
+  en: 9f2d38dd4a291000
+  zh: e0a4085d4f9b7d8d
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys/alternatives-considered:
+  en: 306fe0c5a4db8c0c
+  zh: 9b995263c495d94d
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys/consequences:
+  en: b70b8c5cd4874638
+  zh: 1d2bd129279ed0d4
+/agent-note-the-composer-recalls-submitted-prompts-with-the-arrow-keys/testing:
+  en: 8ce2f4077312bbc7
+  zh: b468a854e39cb7b1
