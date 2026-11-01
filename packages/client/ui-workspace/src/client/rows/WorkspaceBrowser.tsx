@@ -14,8 +14,9 @@
  * are slot entries with their own behavior, so this component threads no
  * action callbacks and hosts no action surface.
  */
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { WorkspaceCard } from './WorkspaceCard.tsx'
 import { WorkspaceDialogs } from './WorkspaceDialogs.tsx'
 import {
   AnimatedRows, HoverCardGroup, IconArchiveCheckOutlineRegular, IconArchiveOffOutlineRegular, IconArchiveOutlineRegular,
@@ -286,6 +287,8 @@ type SessionTreeProps = Pick<
   rowState: SessionRowState
   /** Switch the archived filter back to the default hide-archived view. */
   onLeaveArchivedOnly: () => void
+  /** Open one Workspace's card anchored to its row title. */
+  openWorkspaceCard: (workspaceId: WorkspaceId, anchor: HTMLElement) => void
   /** Open the rename dialog from a row title double-click. */
   onSessionRenameRequest: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** One Session chosen from search that must be exposed and scrolled into view. */
@@ -319,7 +322,7 @@ function SessionTree({
   renderSlot, openSessionMenu, openWorkspaceMenu, useContextMenuTarget, useContextMenu,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
+  setSessionOrder, home, t, openWorkspaceCard,
   revealSessionId, onSessionRevealed, shortcuts,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
@@ -554,6 +557,9 @@ function SessionTree({
         <ProjectRowItem
           newShortcut={shortcuts.find(row => row.id === 'session.new')}
           group={group}
+          {...group.workspaceId === undefined ? {} : {
+            onOpenCard: (anchor: HTMLElement) => { openWorkspaceCard(group.workspaceId as WorkspaceId, anchor) },
+          }}
           openWorkspaceMenu={openWorkspaceMenu} useContextMenu={useContextMenu} useContextMenuTarget={useContextMenuTarget}
           useRemoteAccess={useRemoteAccess}
           useWorkspaceAccess={useWorkspaceAccess}
@@ -1112,6 +1118,19 @@ export function WorkspaceBrowser({
   const wsPickerOpen = shortcutState.addRequested
   const wsPlusRef = useRef<HTMLButtonElement>(null)
   const workspaceActionRequest = useWorkspaceActionRequest(value => value)
+  // The Workspace card is anchored to the clicked row title, so the row keeps
+  // its expansion behavior and only the title opens the card.
+  const [cardAnchor, setCardAnchor] = useState<{ workspaceId: WorkspaceId; anchor: HTMLElement } | null>(null)
+  const cardWorkspace = cardAnchor === null
+    ? undefined
+    : workspaces.find(workspace => workspace.workspaceId === cardAnchor.workspaceId)
+  // The card describes a row of the current grouping; another grouping replaces
+  // the rows it was opened from, so it closes with them.
+  useEffect(() => { setCardAnchor(null) }, [groupBy])
+  const cardAnchorRef = useMemo<RefObject<HTMLElement | null>>(
+    () => ({ current: cardAnchor?.anchor ?? null }),
+    [cardAnchor],
+  )
 
   const openSearchResult = (sessionId: SessionId): void => {
     if (archivedSessionIds.includes(sessionId)) {
@@ -1397,6 +1416,7 @@ export function WorkspaceBrowser({
             )
             : (
               <SessionTree
+                openWorkspaceCard={(workspaceId, anchor) => { setCardAnchor({ workspaceId, anchor }) }}
                 useRemoteAccess={useRemoteAccess}
                 useSessionAccess={useSessionAccess}
                 useWorkspaceAccess={useWorkspaceAccess}
@@ -1429,6 +1449,18 @@ export function WorkspaceBrowser({
               />
             ))}
       </div>
+
+      {cardWorkspace !== undefined && cardAnchor !== null && <WorkspaceCard
+        open
+        anchorRef={cardAnchorRef}
+        label={cardWorkspace.title}
+        paths={cardWorkspace.paths}
+        sessionCount={cardWorkspace.sessionIds.length}
+        home={home}
+        t={t}
+        onClose={() => { setCardAnchor(null) }}
+        onChangePaths={async (paths) => { await setWorkspacePaths(cardAnchor.workspaceId, paths) }}
+      />}
 
       {workspaceActionRequest !== null && <WorkspaceDialogs key={`${workspaceActionRequest.action}/${workspaceActionRequest.workspaceId}`}
         request={workspaceActionRequest} workspaces={workspaces} renameWorkspace={renameWorkspace} deleteWorkspace={deleteWorkspace}

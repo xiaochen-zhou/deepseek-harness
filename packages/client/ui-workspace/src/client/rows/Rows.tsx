@@ -225,6 +225,8 @@ type ProjectRowItemProps = {
   containsCurrentDescendant?: boolean
   onToggle: () => void
   onCreate: () => void
+  /** Open this Workspace's card anchored to the row title; absent for the ungrouped bucket. */
+  onOpenCard?: ((anchor: HTMLElement) => void) | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -278,7 +280,7 @@ function WorkspaceProjectRow({ workspaceId, ...props }: ProjectRowItemProps & { 
 }
 
 function ProjectRow({
-  group, containsCurrentDescendant = false, onToggle, onCreate, drag: offeredDrag, home, newShortcut, t, access,
+  group, containsCurrentDescendant = false, onToggle, onCreate, onOpenCard, drag: offeredDrag, home, newShortcut, t, access,
   openWorkspaceMenu, useContextMenuTarget, useContextMenu,
 }: ProjectRowItemProps & { access: ProjectRowAccess }) {
   const { getTriggerProps } = useContextMenu()
@@ -316,7 +318,13 @@ function ProjectRow({
       <span className={clsx(css.slot, css.chevron)}>
         <IconTriangleRightFillRegular className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
       </span>
-      <span className={css.projectText}>
+      <span
+        className={css.projectText}
+        onClick={onOpenCard === undefined
+          ? undefined
+          : (event) => { onOpenCard(event.currentTarget) }}
+        aria-haspopup={onOpenCard === undefined ? undefined : 'dialog'}
+      >
         <span className={css.title}>{label}</span>
       </span>
       <span className={css.rowActions}>
