@@ -98,6 +98,10 @@ export function WorkspaceDialogs({
   const [nameDraft, setNameDraft] = useState(request.storedTitle)
   const [folderDraft, setFolderDraft] = useState<readonly string[]>(request.paths)
   const [folderInput, setFolderInput] = useState('')
+  // Paths this dialog added, recalled with the arrow keys while it stays mounted.
+  const [folderHistory, setFolderHistory] = useState<readonly string[]>([])
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+  const [historyDraft, setHistoryDraft] = useState('')
   const [savingFolders, setSavingFolders] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
   const foldersChanged = folderDraft.length !== request.paths.length
@@ -118,8 +122,33 @@ export function WorkspaceDialogs({
       return
     }
     setFolderDraft([...folderDraft, folderTrimmed])
+    // Refusals above keep the list free of repeats, so every addition is a new entry.
+    setFolderHistory([...folderHistory, folderTrimmed])
+    setHistoryCursor(null)
     setFolderInput('')
     setFolderError(null)
+  }
+  /** Replace the draft with the previous (-1) or next (1) recalled path. */
+  const recallFolder = (step: -1 | 1) => {
+    if (folderHistory.length === 0) return
+    if (step === -1) {
+      const next = historyCursor === null ? folderHistory.length - 1 : historyCursor - 1
+      if (next < 0) return
+      if (historyCursor === null) setHistoryDraft(folderInput)
+      setHistoryCursor(next)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- next indexes a present entry.
+      setFolderInput(folderHistory[next]!)
+      return
+    }
+    if (historyCursor === null) return
+    if (historyCursor === folderHistory.length - 1) {
+      setHistoryCursor(null)
+      setFolderInput(historyDraft)
+      return
+    }
+    setHistoryCursor(historyCursor + 1)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- the cursor stays inside the list.
+    setFolderInput(folderHistory[historyCursor + 1]!)
   }
   const removeFolder = (path: string) => {
     if (folderDraft.length === 1) {
@@ -283,12 +312,16 @@ export function WorkspaceDialogs({
             aria-label={t('folders.addLabel')}
             placeholder={t('edit.addFolder')}
             disabled={savingFolders}
-            onChange={(event) => { setFolderInput(event.target.value); setFolderError(null) }}
+            onChange={(event) => { setFolderInput(event.target.value); setHistoryCursor(null); setFolderError(null) }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()
                 addFolder()
+                return
               }
+              if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+              event.preventDefault()
+              recallFolder(event.key === 'ArrowUp' ? -1 : 1)
             }}
           />
           <Button variant="outline" disabled={!canAddFolder} onClick={addFolder}>{t('folders.add')}</Button>

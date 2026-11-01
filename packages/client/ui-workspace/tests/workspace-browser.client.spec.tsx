@@ -2649,6 +2649,40 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByText('/')).toBeTruthy()
   })
 
+  it('recalls added paths with the arrow keys', () => {
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths: vi.fn(async () => {}),
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
+    // Nothing to recall yet, and typing resets the cursor.
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('')
+    for (const path of ['/projects/one', '/projects/two']) {
+      fireEvent.change(input, { target: { value: path } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+    fireEvent.change(input, { target: { value: '/projects/draft' } })
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('/projects/two')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('/projects/one')
+    // The oldest entry stops the walk.
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('/projects/one')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('/projects/two')
+    // Walking past the newest entry restores the draft that was typed.
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('/projects/draft')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('/projects/draft')
+    // An unrelated key leaves the draft alone.
+    fireEvent.keyDown(input, { key: 'a' })
+    expect(input.value).toBe('/projects/draft')
+  })
+
   it('closes the edit dialog without saving through Cancel', () => {
     const setWorkspacePaths = vi.fn(async () => {})
     const browser = mount({
