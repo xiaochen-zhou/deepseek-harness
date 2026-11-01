@@ -38,6 +38,7 @@ interface CardPosition {
  * @param props.widthAnchorRef - optional element whose width and horizontal position size the preview.
  * @param props.inline - keep the anchor in prose; show a contained preview on hover or keyboard focus.
  * Its hover region connects the anchor and preview across the visual gap.
+ * @param props.width - compact card width in pixels; the preview variant sizes itself.
  * @param props.fitContent - size an inline card to its content within the usual width cap.
  * @param props.disabled - suppress opening; turning true dismisses an open card.
  * @param props.grouped - share first-display dwell across the surrounding list and active portal.
@@ -50,12 +51,14 @@ interface CardPosition {
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false, grouped = false,
-  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, inline = false, fitContent = false,
+  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, width, inline = false, fitContent = false,
 }: {
   anchor: ReactNode
   /** Inline media preview using the shared menu material and keyboard focus. */
   inline?: boolean
   fitContent?: boolean
+  /** Compact card width in pixels; ignored by the preview and inline variants. */
+  width?: number | undefined
   content: ReactNode
   openDelayMs?: number
   disabled?: boolean
@@ -283,7 +286,7 @@ export function HoverCard({
       className={clsx(css.card, variant === 'preview' && css.preview, inline && css.media, inline && fitContent && css.fitContent, copyable && css.copyable, copied && css.feedback)}
       data-closing={closing || undefined}
       style={{
-        left: pos.left, top: pos.top, width: pos.width, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight,
+        left: pos.left, top: pos.top, width: width ?? pos.width, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight,
         minHeight: copied && copyHeightRef.current !== null ? copyHeightRef.current : undefined,
         '--dsh-hover-preview-fade': `${PREVIEW_FADE_MS}ms`,
       } as CSSProperties}

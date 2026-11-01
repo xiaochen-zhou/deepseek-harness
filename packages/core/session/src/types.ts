@@ -105,6 +105,13 @@ export interface SessionHeader {
   /** Absolute working directory the session was created in (if any). */
   readonly cwd?: string
   /**
+   * Ordered absolute directories this Session may modify, primary first. Absent
+   * means {@link cwd} alone bounds writes. Snapshotted here rather than read
+   * from the workspace registry because the sandbox policy it feeds is
+   * model-visible and must replay from the log.
+   */
+  readonly workspaceRoots?: readonly string[]
+  /**
    * Direct creator of a subagent Session. Ordinary forks omit this field;
    * historical ordinary forks may retain their source id here. Presence alone
    * does not classify a Session as a subagent; use `origin` for that distinction.
@@ -155,6 +162,7 @@ export interface CreateSessionOptions {
    */
   readonly meta?: {
     readonly cwd?: string
+    readonly workspaceRoots?: readonly string[]
     readonly parentSession?: SessionId
     readonly createdAt?: number
     readonly isSeeded?: boolean

@@ -76,6 +76,7 @@ export class TestWorkspaces implements IWorkspaces {
       workspaceId: `ws-${input.path}` as WorkspaceId,
       title: input.path,
       path: input.path,
+      paths: [input.path],
       sessionIds: [],
     } as unknown as WorkspaceView
   }
@@ -101,7 +102,25 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'rename', args: [workspaceId, title] })
     const stub = this.stubs.get('rename')
     if (stub !== undefined) return await (stub(workspaceId, title) as Promise<WorkspaceView>)
-    return { workspaceId, title, path: `/${title}`, sessionIds: [] } as unknown as WorkspaceView
+    return {
+      workspaceId, title, path: `/${title}`, paths: [`/${title}`], sessionIds: [],
+    } as unknown as WorkspaceView
+  }
+
+  /**
+   * Replace a Workspace's directories (recorded). The default echoes a view
+   * carrying the requested paths.
+   * @param workspaceId - target workspace.
+   * @param paths - ordered directories, primary first.
+   * @returns the updated view.
+   */
+  async setPaths(workspaceId: WorkspaceId, paths: readonly string[]): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setPaths', args: [workspaceId, paths] })
+    const stub = this.stubs.get('setPaths')
+    if (stub !== undefined) return await (stub(workspaceId, paths) as Promise<WorkspaceView>)
+    return {
+      workspaceId, title: paths[0] ?? '', path: paths[0] ?? '', paths: [...paths], sessionIds: [],
+    } as unknown as WorkspaceView
   }
 
   /**
@@ -134,7 +153,9 @@ export class TestWorkspaces implements IWorkspaces {
     this.calls.push({ method: 'insertSessionBefore', args: [workspaceId, sessionId, beforeSessionId] })
     const stub = this.stubs.get('insertSessionBefore')
     if (stub !== undefined) return await (stub(workspaceId, sessionId, beforeSessionId) as Promise<WorkspaceView>)
-    return { workspaceId, title: '', path: '', sessionIds: [sessionId] } as unknown as WorkspaceView
+    return {
+      workspaceId, title: '', path: '', paths: [''], sessionIds: [sessionId],
+    } as unknown as WorkspaceView
   }
 
   /**

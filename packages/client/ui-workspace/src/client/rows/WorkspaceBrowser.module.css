@@ -660,3 +660,238 @@
     transition: none;
   }
 }
+
+/* The Workspace directories editor: current directories, then one add row. */
+.folderHint {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.folderList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folderPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/** The add row is one full-width button; the host chooser owns the path. */
+.folderAdd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.folderAdd:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderAdd:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.folderRow > button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The hovered Workspace card sits on the hover tooltip's dark surface, so it
+   uses the inverted label colors rather than the page tokens. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+}
+
+.cardTitle {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgb(255 255 255 / 72%);
+}
+
+.cardDivider {
+  height: 1px;
+  margin: 10px 0;
+  background: rgb(255 255 255 / 14%);
+}
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  list-style: none;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.cardRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: rgb(255 255 255 / 88%);
+}
+
+.cardPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.cardEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 8%);
+  font-size: 13px;
+  color: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardEdit:hover {
+  background: rgb(255 255 255 / 16%);
+}
+
+/* The edit dialog: the project name, its source folders, and removal. */
+.editFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.editActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.editNameInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.editLabel {
+  margin: 14px 0 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderRemove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.folderRemove:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderRemove:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.folderName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderPrimary {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}

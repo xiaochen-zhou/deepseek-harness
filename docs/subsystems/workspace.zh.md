@@ -24,22 +24,32 @@ type WorkspaceId = Branded<'WorkspaceId'>
 
 ```ts type-equiv
 /**
- * One workspace: a stable id over an existing directory, a display title, and
- * an ordered candidate account of sessions. Membership validates header cwd
- * against the workspace path, but preserves an existing account when its
- * fully qualified cwd is missing. Consumers only see this interface; the
- * implementation stays private.
+ * One workspace: a stable id over one or more existing directories, a display
+ * title, and an ordered candidate account of sessions. Membership validates
+ * header cwd against the workspace paths, but preserves an existing account
+ * when its fully qualified cwd is missing. Consumers only see this interface;
+ * the implementation stays private.
  */
 interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
 
   /**
-   * Canonical directory path: the `fs.realpath` of the path given at create
-   * time (trailing slashes, `..`, and symlinks all resolved). Never rewritten
-   * afterwards, even when the directory disappears (see {@link status}).
+   * Primary canonical directory path: the `fs.realpath` of the path given at
+   * create time (trailing slashes, `..`, and symlinks all resolved). Never
+   * rewritten by {@link status}; {@link setPaths} may replace it. This is the
+   * directory a Session created from this workspace runs in.
    */
   readonly path: string
+
+  /**
+   * Every canonical directory this workspace owns, primary first. A
+   * single-directory workspace returns `[path]`. Sessions created from the
+   * workspace snapshot this list as their writable roots, so adding a
+   * directory here extends what their tools may modify; removing one prunes
+   * accounted sessions whose cwd was that directory.
+   */
+  readonly paths: readonly string[]
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
@@ -75,9 +85,9 @@ interface Workspace {
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path};
-   * unknown ids, missing or invalid cwd values, and mismatches reject without
-   * writing.
+   * header cwd must resolve to an existing directory equal to one of
+   * {@link paths}; unknown ids, missing or invalid cwd values, and
+   * non-membership reject without writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
@@ -338,6 +348,15 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('rename') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>
 
 /**
+ * Replace the directories one Workspace owns, primary first. Sessions
+ * created from the Workspace afterwards run in the primary and may write
+ * under every directory in the set.
+ * @param request - Workspace identity and ordered directories.
+ * @returns the updated Workspace projection.
+ */
+@Remote('setPaths') setPaths(request: WorkspaceSetPathsRequest): Promise<WorkspaceValue>
+
+/**
  * Remove one Workspace registration while retaining files and Sessions.
  * @param request - Workspace identity to remove.
  * @returns deletion confirmation.
@@ -480,6 +499,20 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
  * @returns the existing or newly durable workspace.
  */
 async create(path: string, title?: string): Promise<Workspace>
+
+/**
+ * Replace the directories one workspace owns. Every entry must name an
+ * existing directory in a fully qualified spelling; entries are canonicalized
+ * through the same `fs.realpath` canon as create, repeats collapse, and a
+ * directory another workspace owns rejects. The first entry becomes the
+ * workspace's primary path, which is the cwd of Sessions created from it
+ * afterwards; removing a directory prunes accounted sessions whose cwd was
+ * that directory. An unknown id rejects.
+ * @param id - Workspace to rewrite.
+ * @param paths - Ordered directories, primary first; at least one.
+ * @returns the updated workspace.
+ */
+setPaths(id: WorkspaceId, paths: readonly string[]): Promise<Workspace>
 
 /**
  * Initialize the default Workspace only while both the registry and Session

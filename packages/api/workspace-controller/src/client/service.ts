@@ -49,10 +49,11 @@ export interface IWorkspaces {
   readonly list: WorkspaceSource
   /**
    * Register an existing path as a Workspace.
-   * @param input - Host create payload.
+   * @param input - Host create payload, optionally naming further directories
+   *   the same Workspace owns.
    * @returns the created or idempotently resolved Workspace.
    */
-  create(input: { path: string }): Promise<WorkspaceView>
+  create(input: { path: string; extraPaths?: readonly string[] }): Promise<WorkspaceView>
   /**
    * Initialize or reuse the default Workspace.
    * @param signal - caller lifetime.
@@ -66,6 +67,13 @@ export interface IWorkspaces {
    * @returns the renamed Workspace.
    */
   rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>
+  /**
+   * Replace the directories a Workspace owns.
+   * @param workspaceId - target Workspace.
+   * @param paths - ordered directories, primary first.
+   * @returns the updated Workspace.
+   */
+  setPaths(workspaceId: WorkspaceId, paths: readonly string[]): Promise<WorkspaceView>
   /**
    * Delete a Workspace registration without deleting Sessions or files.
    * @param workspaceId - target Workspace.
@@ -127,7 +135,7 @@ export class WorkspaceController extends Service implements IWorkspaces {
     this.list = model
   }
 
-  async create(input: { path: string }): Promise<WorkspaceView> {
+  async create(input: { path: string; extraPaths?: readonly string[] }): Promise<WorkspaceView> {
     const result = await this.model.create(input)
     if (!result.ok) throw new WorkspaceCreateError(result.error)
     return result.value.workspace
@@ -142,6 +150,12 @@ export class WorkspaceController extends Service implements IWorkspaces {
   async rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView> {
     const result = await this.model.rename(workspaceId, title)
     if (!result.ok) throw commandError('rename', result.error)
+    return result.value.workspace
+  }
+
+  async setPaths(workspaceId: WorkspaceId, paths: readonly string[]): Promise<WorkspaceView> {
+    const result = await this.model.setPaths(workspaceId, paths)
+    if (!result.ok) throw commandError('set paths', result.error)
     return result.value.workspace
   }
 

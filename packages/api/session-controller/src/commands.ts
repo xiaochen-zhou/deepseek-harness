@@ -113,12 +113,13 @@ export class SessionCommandController {
         })
       }
     }
-    const cwd = workspace?.path ?? request.cwd ?? this.defaultCwd
+    const cwd = workspace?.paths[0] ?? request.cwd ?? this.defaultCwd
     let created: ApiSessionCreated
     try {
       created = await this.agents.createSession({
         ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
         cwd,
+        ...(workspace === undefined ? {} : { workspaceRoots: workspace.paths }),
         ...(request.agentPreset === undefined ? {} : { agentPreset: request.agentPreset }),
         reusable: sessionId => !this.ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)
           && (workspace === undefined || workspace.sessionIds.includes(sessionId)),

@@ -13,8 +13,9 @@ describe('Client Cordis inspect catalog', () => {
       ])
     expect(SERVICE_API.find(service => service.key === 'workspaces')?.methods.map(method => method.signature))
       .toEqual([
-        'create(input: { path: string }): Promise<WorkspaceView>',
+        'create(input: { path: string; extraPaths?: readonly string[] }): Promise<WorkspaceView>',
         'rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>',
+        'setPaths(workspaceId: WorkspaceId, paths: readonly string[]): Promise<WorkspaceView>',
         'delete(workspaceId: WorkspaceId): Promise<void>',
         'archiveSession(sessionId: SessionId, options?: { readonly stopActivity?: boolean }): Promise<void>',
         'unarchiveSession(sessionId: SessionId): Promise<void>',

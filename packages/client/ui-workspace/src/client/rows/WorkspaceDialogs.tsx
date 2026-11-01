@@ -1,17 +1,34 @@
-/** Workspace rename and removal dialogs, keyed by their captured request. */
+/** Workspace rename, removal, and directory-set dialogs, keyed by their captured request. */
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button, IconCloseFillRegular, IconFolderOpenRegular, IconPlusOutlineRegular, Modal,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { WorkspaceActionRequest, WorkspaceBrowserProps } from '../contract/slots.ts'
+import type {
+  DirectoryFlowOwnerProps, WorkspaceActionRequest, WorkspaceBrowserProps,
+} from '../contract/slots.ts'
 import css from './WorkspaceBrowser.module.css'
 
-type Props = Pick<WorkspaceBrowserProps, 'renameWorkspace' | 'deleteWorkspace' | 'settleWorkspaceAction' | 't'> & {
+/** Last path segment of a directory, for a row that shows the full path on hover. */
+function folderName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(part => part !== '')
+  return parts[parts.length - 1] ?? path
+}
+
+type Props = Pick<
+  WorkspaceBrowserProps,
+  | 'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction'
+  | 'requestWorkspaceAction' | 'useDirectoryFlow' | 'renderSlot' | 't'
+> & {
   request: WorkspaceActionRequest
   workspaces: readonly WorkspaceView[]
 }
 
 /** @param props - captured request, current Workspace list, and existing mutations. @returns the active dialog. */
-export function WorkspaceDialogs({ request, workspaces, renameWorkspace, deleteWorkspace, settleWorkspaceAction, t }: Props) {
+export function WorkspaceDialogs({
+  request, workspaces, renameWorkspace, deleteWorkspace, setWorkspacePaths, settleWorkspaceAction,
+  requestWorkspaceAction, useDirectoryFlow, renderSlot, t,
+}: Props) {
   const composingRef = useRef(false)
   const renameTarget = request.action === 'rename' ? request : null
   const [renameDraft, setRenameDraft] = useState(request.displayTitle)
@@ -76,6 +93,87 @@ export function WorkspaceDialogs({ request, workspaces, renameWorkspace, deleteW
     })
   }
 
+  const foldersTarget = request.action === 'folders' ? request : null
+  const [nameDraft, setNameDraft] = useState(request.storedTitle)
+  const [folderDraft, setFolderDraft] = useState<readonly string[]>(request.paths)
+  const [savingFolders, setSavingFolders] = useState(false)
+  const [folderError, setFolderError] = useState<string | null>(null)
+  const foldersChanged = folderDraft.length !== request.paths.length
+    || folderDraft.some((path, index) => path !== request.paths[index])
+  const nameTrimmed = nameDraft.trim()
+  const nameChanged = nameTrimmed !== '' && nameTrimmed !== request.storedTitle
+  // The Host picks the directory: a typed path could not tell the operator
+  // which directory they had actually chosen, and every other add-workspace
+  // affordance in this package also goes through the host chooser.
+  const flowAvailable = useDirectoryFlow(occupied => occupied)
+  const [flowOpen, setFlowOpen] = useState(false)
+  useEffect(() => {
+    // A withdrawn chooser (dialog closed, occupant unloaded) must not reopen on
+    // the next dialog: the owner conversation ends with the interaction.
+    if (foldersTarget === null || !flowAvailable) setFlowOpen(false)
+  }, [foldersTarget, flowAvailable])
+  const appendFolder = (path: string) => {
+    if (folderDraft.includes(path)) {
+      setFolderError(t('folders.duplicate'))
+      return
+    }
+    setFolderDraft([...folderDraft, path])
+    setFolderError(null)
+  }
+  const flowOwner: DirectoryFlowOwnerProps = {
+    open: flowOpen,
+    busy: savingFolders,
+    onPicked: (path) => {
+      setFlowOpen(false)
+      appendFolder(path)
+    },
+    onCancel: () => { setFlowOpen(false) },
+    onError: (message) => {
+      setFlowOpen(false)
+      setFolderError(message)
+    },
+  }
+  const removeFolder = (path: string) => {
+    if (folderDraft.length === 1) {
+      setFolderError(t('folders.keepOne'))
+      return
+    }
+    setFolderDraft(folderDraft.filter(entry => entry !== path))
+    setFolderError(null)
+  }
+  const closeFolders = () => {
+    if (savingFolders) return
+    setFlowOpen(false)
+    settleWorkspaceAction()
+    setFolderError(null)
+  }
+  const saveFolders = () => {
+    if (savingFolders || foldersTarget === null || (!foldersChanged && !nameChanged)) return
+    const workspaceId = foldersTarget.workspaceId
+    setSavingFolders(true)
+    setFolderError(null)
+    void (async () => {
+      try {
+        if (nameChanged) await renameWorkspace(workspaceId, nameTrimmed)
+        if (foldersChanged) await setWorkspacePaths(workspaceId, folderDraft)
+        setSavingFolders(false)
+        settleWorkspaceAction()
+      } catch (reason: unknown) {
+        setSavingFolders(false)
+        setFolderError(reason instanceof Error ? reason.message : String(reason))
+      }
+    })()
+  }
+  // The card's edit action removes the project through the same confirmation
+  // every other removal uses.
+  const removeProject = () => {
+    /* v8 ignore next -- the control is disabled while a save runs, and the dialog only opens with a target. */
+    if (savingFolders || foldersTarget === null) return
+    const { workspaceId, displayTitle } = foldersTarget
+    settleWorkspaceAction()
+    requestWorkspaceAction(workspaceId, displayTitle, 'delete')
+  }
+
   return <>
     <Modal
       open={renameTarget !== null}
@@ -136,6 +234,79 @@ export function WorkspaceDialogs({ request, workspaces, renameWorkspace, deleteW
     >
       {deleting && <div className={css.deleteStatus} role="status">{t('delete.pending')}</div>}
       {deleteError !== null && <div className={css.renameError} role="alert">{deleteError}</div>}
+    </Modal>
+
+    <Modal
+      open={foldersTarget !== null}
+      onClose={closeFolders}
+      closeLabel={t('close')}
+      title={t('edit.title')}
+      footer={(
+        <div className={css.editFooter}>
+          <Button
+            variant="outline"
+            className={css.deleteAction}
+            disabled={savingFolders}
+            onClick={removeProject}
+          >
+            {t('edit.removeProject')}
+          </Button>
+          <div className={css.editActions}>
+            <Button variant="outline" disabled={savingFolders} onClick={closeFolders}>{t('cancel')}</Button>
+            <Button variant="primary" onClick={saveFolders}>
+              {t('save')}
+            </Button>
+          </div>
+        </div>
+      )}
+    >
+      <div className={css.editName}>
+        <IconFolderOpenRegular size={16} />
+        <input
+          className={css.editNameInput}
+          value={nameDraft}
+          aria-label={t('edit.name')}
+          disabled={savingFolders}
+          onChange={(event) => { setNameDraft(event.target.value); setFolderError(null) }}
+        />
+      </div>
+      <div className={css.editLabel}>{t('edit.sourceFolders')}</div>
+      <ul className={css.folderList}>
+        {folderDraft.map((path, index) => (
+          <li key={path} className={css.folderRow}>
+            <IconFolderOpenRegular size={15} />
+            <span className={css.folderName} title={path}>{folderName(path)}</span>
+            {index === 0 && <span className={css.folderPrimary}>{t('edit.primary')}</span>}
+            <button
+              type="button"
+              className={css.folderRemove}
+              aria-label={t('folders.removeNamed', { path })}
+              disabled={savingFolders}
+              onClick={() => { removeFolder(path) }}
+            >
+              <IconCloseFillRegular size={12} />
+            </button>
+          </li>
+        ))}
+        {/* No picking occupant in this composition means no folder can be
+            added here; the row withdraws rather than offering a chooser that
+            nobody answers. */}
+        {flowAvailable && (
+          <li>
+            <button
+              type="button"
+              className={css.folderAdd}
+              disabled={savingFolders}
+              onClick={() => { setFlowOpen(true); setFolderError(null) }}
+            >
+              <IconPlusOutlineRegular size={14} />
+              {t('edit.addFolder')}
+            </button>
+          </li>
+        )}
+      </ul>
+      {flowOpen && renderSlot('sidebar.workspaces.directoryFlow', flowOwner)}
+      {folderError !== null && <div className={css.renameError} role="alert">{folderError}</div>}
     </Modal>
   </>
 }

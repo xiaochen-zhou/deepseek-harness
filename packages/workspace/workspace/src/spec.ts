@@ -17,12 +17,16 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 const sessionId = z.string().transform(value => brandString<SessionId>(value))
 
 /**
- * Durable shape of one workspace record. `path` is the `fs.realpath` canon
- * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); timestamps are ISO-8601 strings.
+ * Durable shape of one workspace record. `path` is the primary `fs.realpath`
+ * canon stamped at create; `extraPaths` are the further directories the same
+ * workspace owns, in display order after the primary. A record written before
+ * multi-directory workspaces existed has no `extraPaths` and parses as a
+ * single-directory workspace. `sessionIds` is the ordered ownership account
+ * (array order is display order); timestamps are ISO-8601 strings.
  */
 export const workspaceRecord = z.object({
   path: z.string(),
+  extraPaths: z.array(z.string()).default([]),
   title: z.string(),
   sessionIds: z.array(sessionId),
   createdAt: z.string(),
@@ -75,7 +79,8 @@ export type WorkspaceDomainState = z.infer<typeof workspaceDomainState>
  */
 export const workspaceDomainSpec = defineDomain({
   name: 'workspace',
-  version: 2,
+  version: 3,
+  compatibleVersions: [2],
   global: {
     schema: workspaceDomainState,
     initial: { initialized: false, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] },

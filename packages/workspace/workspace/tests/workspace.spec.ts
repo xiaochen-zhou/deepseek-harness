@@ -141,6 +141,7 @@ function selectiveFailureBackend(
 function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:00:00.000Z'): WorkspaceRecord {
   return {
     path,
+    extraPaths: [],
     title: basename(path),
     sessionIds: sessionIds.map(SessionId),
     createdAt,
@@ -418,6 +419,72 @@ describe('WorkspaceRegistry create and lookup', () => {
     expect(first.title).toBe('Shared')
     expect(second.title).toBe('Shared')
     expect(registry.list()).toEqual([second, first])
+  })
+
+  it('owns several directories and admits sessions whose cwd is any of them', async () => {
+    const firstDir = await makeDir('multi-first')
+    const secondDir = await makeDir('multi-second')
+    const result = await harness()
+    const workspace = await result.registry.create(firstDir)
+    result.setSessions([header('from-first', firstDir), header('from-second', secondDir)])
+    await result.registry.setPaths(workspace.id, [firstDir, secondDir])
+    expect(workspace.paths).toEqual([firstDir, secondDir])
+    expect(workspace.path).toBe(firstDir)
+    expect(storedRecord(result.pool, workspace.id).extraPaths).toEqual([secondDir])
+    await workspace.attachSession(SessionId('from-first'))
+    await workspace.attachSession(SessionId('from-second'))
+    expect(workspace.sessionIds).toEqual([SessionId('from-second'), SessionId('from-first')])
+    expect(await result.registry.resolveByPath(secondDir)).toBe(workspace)
+    expect(await result.registry.create(secondDir)).toBe(workspace)
+  })
+
+  it('collapses repeated directories and rejects empty, missing, and foreign-owned sets', async () => {
+    const firstDir = await makeDir('set-first')
+    const secondDir = await makeDir('set-second')
+    const extraDir = await makeDir('set-extra')
+    const ownDir = await makeDir('set-own')
+    const missing = join(base, 'set-missing')
+    const { registry } = await harness()
+    const first = await registry.create(firstDir)
+    const second = await registry.create(secondDir)
+    await registry.setPaths(first.id, [firstDir, extraDir, firstDir])
+    expect(first.paths).toEqual([firstDir, extraDir])
+    await expect(registry.setPaths(first.id, [])).rejects.toThrow(/at least one/)
+    await expect(registry.setPaths(first.id, [ownDir, missing])).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(registry.setPaths(second.id, [secondDir, firstDir])).rejects.toThrow(/already owns/)
+    await registry.setPaths(second.id, [ownDir])
+    expect(second.paths).toEqual([ownDir])
+  })
+
+  it('prunes sessions whose directory the workspace stops owning', async () => {
+    const keptDir = await makeDir('prune-kept')
+    const droppedDir = await makeDir('prune-dropped')
+    const result = await harness()
+    const workspace = await result.registry.create(keptDir)
+    result.setSessions([header('kept', keptDir), header('dropped', droppedDir)])
+    await result.registry.setPaths(workspace.id, [keptDir, droppedDir])
+    await workspace.attachSession(SessionId('kept'))
+    await workspace.attachSession(SessionId('dropped'))
+    expect(workspace.sessionIds).toHaveLength(2)
+    await result.registry.setPaths(workspace.id, [keptDir])
+    expect(workspace.sessionIds).toEqual([SessionId('kept')])
+    expect(storedRecord(result.pool, workspace.id).sessionIds).toEqual([SessionId('kept')])
+    const adopted = await result.registry.create(droppedDir)
+    await adopted.attachSession(SessionId('dropped'))
+    expect(adopted.sessionIds).toEqual([SessionId('dropped')])
+  })
+
+  it('reloads the owned directory set from the persisted record', async () => {
+    const firstDir = await makeDir('reload-first')
+    const secondDir = await makeDir('reload-second')
+    const first = await harness()
+    const workspace = await first.registry.create(firstDir)
+    await first.registry.setPaths(workspace.id, [firstDir, secondDir])
+    await first.ctx.fiber.dispose()
+    const second = await harness({ pool: first.pool, sessions: [header('reloaded', secondDir)] })
+    const reloaded = second.registry.list()[0] as ReturnType<typeof second.registry.list>[number]
+    expect(reloaded.paths).toEqual([firstDir, secondDir])
+    expect(reloaded.path).toBe(firstDir)
   })
 
   it('rejects nonexistent and non-directory paths without changing order', async () => {

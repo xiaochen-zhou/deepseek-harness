@@ -25,6 +25,7 @@ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import { WorkspaceCard, type WorkspaceCardProps } from './WorkspaceCard.tsx'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
@@ -225,6 +226,8 @@ type ProjectRowItemProps = {
   containsCurrentDescendant?: boolean
   onToggle: () => void
   onCreate: () => void
+  /** Card contents for the hovered Workspace row; absent for the ungrouped bucket. */
+  workspaceCard?: Omit<WorkspaceCardProps, 'label' | 'home' | 't'> | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -278,7 +281,7 @@ function WorkspaceProjectRow({ workspaceId, ...props }: ProjectRowItemProps & { 
 }
 
 function ProjectRow({
-  group, containsCurrentDescendant = false, onToggle, onCreate, drag: offeredDrag, home, newShortcut, t, access,
+  group, containsCurrentDescendant = false, onToggle, onCreate, workspaceCard, drag: offeredDrag, home, newShortcut, t, access,
   openWorkspaceMenu, useContextMenuTarget, useContextMenu,
 }: ProjectRowItemProps & { access: ProjectRowAccess }) {
   const { getTriggerProps } = useContextMenu()
@@ -350,14 +353,17 @@ function ProjectRow({
   return (
     <HoverCard
       anchor={ownRow}
-      content={<WorkspaceHoverContent
-        label={row.label}
-        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
-        createdAt={row.createdAt}
-        t={t}
-      />}
+      content={workspaceCard === undefined
+        ? <WorkspaceHoverContent
+          label={row.label}
+          cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+          createdAt={row.createdAt}
+          t={t}
+        />
+        : <WorkspaceCard label={row.label} home={home} t={t} {...workspaceCard} />}
       openDelayMs={800}
       grouped
+      width={workspaceCard === undefined ? undefined : 320}
       disabled={menuOpen}
       copyText={row.cwd}
       copyLabel={t('copy')}

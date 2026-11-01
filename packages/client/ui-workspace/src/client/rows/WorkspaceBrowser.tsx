@@ -38,6 +38,7 @@ import {
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
+import type { WorkspaceCardProps } from './WorkspaceCard.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
@@ -286,6 +287,8 @@ type SessionTreeProps = Pick<
   rowState: SessionRowState
   /** Switch the archived filter back to the default hide-archived view. */
   onLeaveArchivedOnly: () => void
+  /** Open one Workspace's edit dialog from its hover card. */
+  requestWorkspaceAction: (workspaceId: WorkspaceId, displayTitle: string, action: 'folders') => void
   /** Open the rename dialog from a row title double-click. */
   onSessionRenameRequest: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** One Session chosen from search that must be exposed and scrolled into view. */
@@ -319,7 +322,7 @@ function SessionTree({
   renderSlot, openSessionMenu, openWorkspaceMenu, useContextMenuTarget, useContextMenu,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
+  setSessionOrder, home, t, requestWorkspaceAction,
   revealSessionId, onSessionRevealed, shortcuts,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
@@ -341,6 +344,16 @@ function SessionTree({
   const workspaceDropCommitted = useRef(false)
   const nativeDragActive = drag !== null || workspaceDrag !== null
   useNativeDragAcceptance(nativeDragActive)
+  /** Card contents for one Workspace row: its directories, Session count, and edit action. */
+  const workspaceCardFor = (workspaceId: WorkspaceId, label: string): Omit<WorkspaceCardProps, 'label' | 'home' | 't'> | undefined => {
+    const workspace = workspaces.find(entry => entry.workspaceId === workspaceId)
+    if (workspace === undefined) return undefined
+    return {
+      paths: workspace.paths,
+      sessionCount: workspace.sessionIds.length,
+      onEdit: () => { requestWorkspaceAction(workspaceId, label, 'folders') },
+    }
+  }
   const currentGroup = current === undefined || !workspaceReady
     ? undefined
     : owningGroupKey(workspaces, current)
@@ -554,6 +567,7 @@ function SessionTree({
         <ProjectRowItem
           newShortcut={shortcuts.find(row => row.id === 'session.new')}
           group={group}
+          {...group.workspaceId === undefined ? {} : { workspaceCard: workspaceCardFor(group.workspaceId as WorkspaceId, group.label) }}
           openWorkspaceMenu={openWorkspaceMenu} useContextMenu={useContextMenu} useContextMenuTarget={useContextMenuTarget}
           useRemoteAccess={useRemoteAccess}
           useWorkspaceAccess={useWorkspaceAccess}
@@ -914,6 +928,8 @@ export function WorkspaceBrowser({
   notifyArchivedNotOpenable,
   renameWorkspace, useWorkspaceActionRequest, settleWorkspaceAction,
   deleteWorkspace,
+  setWorkspacePaths,
+  requestWorkspaceAction,
   insertWorkspaceBefore,
   unarchiveSession,
   createWorkspace,
@@ -1396,6 +1412,7 @@ export function WorkspaceBrowser({
             )
             : (
               <SessionTree
+                requestWorkspaceAction={(workspaceId, displayTitle) => { requestWorkspaceAction(workspaceId, displayTitle, 'folders') }}
                 useRemoteAccess={useRemoteAccess}
                 useSessionAccess={useSessionAccess}
                 useWorkspaceAccess={useWorkspaceAccess}
@@ -1431,7 +1448,9 @@ export function WorkspaceBrowser({
 
       {workspaceActionRequest !== null && <WorkspaceDialogs key={`${workspaceActionRequest.action}/${workspaceActionRequest.workspaceId}`}
         request={workspaceActionRequest} workspaces={workspaces} renameWorkspace={renameWorkspace} deleteWorkspace={deleteWorkspace}
-        settleWorkspaceAction={settleWorkspaceAction} t={t} />}
+        setWorkspacePaths={setWorkspacePaths} requestWorkspaceAction={requestWorkspaceAction}
+        settleWorkspaceAction={settleWorkspaceAction} useDirectoryFlow={useDirectoryFlow}
+        renderSlot={renderSlot} t={t} />}
     </div>
   )
 }

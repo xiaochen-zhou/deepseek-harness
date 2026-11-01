@@ -115,7 +115,9 @@ async function harness(options: HarnessOptions = {}) {
     },
   }) as never)
   const { members, archived } = options.workspace ?? { members: [], archived: [] }
-  const workspace = { id: WORKSPACE, path: cwd, sessionIds: members, attachSession: () => Promise.resolve() }
+  const workspace = {
+    id: WORKSPACE, path: cwd, paths: [cwd], sessionIds: members, attachSession: () => Promise.resolve(),
+  }
   ctx.provide('workspaceRegistry', {
     get: (id: WorkspaceId) => id === WORKSPACE ? workspace : undefined,
     list: () => [workspace],
@@ -654,7 +656,7 @@ describe('session.create Workspace placement', () => {
   it('reuses a blank member of the requested Workspace', async () => {
     const draft = SessionId('member-draft')
     const { remote } = await harness({ presets: ['standard'], workspace: { members: [draft], archived: [] } })
-    await remote.create({ sessionId: draft })
+    await remote.create({ sessionId: draft, workspaceId: WORKSPACE })
 
     const reused = await remote.create({ sessionId: draft, workspaceId: WORKSPACE })
 

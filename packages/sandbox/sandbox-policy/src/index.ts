@@ -56,6 +56,26 @@ function resolveAdditionalWritableRoots(roots: readonly string[] | undefined): r
   return Object.freeze([...new Set(roots)])
 }
 
+/**
+ * Merge the deployment's extra roots with the roots the session snapshotted at
+ * creation. The primary root is already the workspace boundary, so it is not
+ * repeated; the result keeps configuration order before session order.
+ * @param configured - deployment `additionalWritableRoots`, or none.
+ * @param sessionRoots - the session's ordered workspace roots, or none.
+ * @param workspaceRoot - the resolved primary root.
+ * @returns a frozen deduplicated list, or `undefined` when nothing is left.
+ */
+function mergeWritableRoots(
+  configured: readonly string[] | undefined,
+  sessionRoots: readonly string[] | undefined,
+  workspaceRoot: string,
+): readonly string[] | undefined {
+  if (sessionRoots === undefined) return configured
+  const merged = [...configured ?? [], ...sessionRoots.filter(root => root !== workspaceRoot)]
+  const unique = [...new Set(merged)]
+  return unique.length === 0 ? undefined : Object.freeze(unique)
+}
+
 /** Render the policy without claiming which capabilities are mounted. */
 function renderPolicyContext(policy: SandboxExecutionPolicy): string {
   switch (policy.mode) {
@@ -188,18 +208,24 @@ export class SandboxPolicyService extends Service {
   /**
    * Resolve the complete policy for one capability call. An approved explicit
    * mode outranks the session's last `sandbox/mode` event, which outranks the
-   * deployment default. A session cwd is its workspace-write boundary; the
-   * configured root is the fallback for agentless calls and sessions without a
-   * cwd.
+   * deployment default. A session cwd is its workspace-write boundary, the
+   * roots the session snapshotted at creation extend it, and the configured
+   * root is the fallback for agentless calls and sessions without a cwd.
    * @param request - optional session and approved mode override.
    * @returns the fully resolved per-call mode and absolute workspace root.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const workspaceRoot = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
+    const additionalWritableRoots = mergeWritableRoots(
+      this.additionalWritableRoots,
+      session?.header.workspaceRoots,
+      workspaceRoot,
+    )
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
-      workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
-      ...this.additionalWritableRoots === undefined ? {} : { additionalWritableRoots: this.additionalWritableRoots },
+      workspaceRoot,
+      ...additionalWritableRoots === undefined ? {} : { additionalWritableRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
   }
