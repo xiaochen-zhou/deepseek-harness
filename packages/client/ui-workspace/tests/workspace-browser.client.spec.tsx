@@ -107,6 +107,37 @@ const renderDirectoryFlowOnly: WorkspaceBrowserProps['renderSlot'] = (name: stri
     ? <div data-testid="directory-flow" />
     : null
 
+/** Directory-flow stub: an open flow exposes one button that settles with `pick()`. */
+function pickingFlow(pick: () => string | null): WorkspaceBrowserProps['renderSlot'] {
+  return ((name: string, owner: object) => {
+    if (name !== 'sidebar.workspaces.directoryFlow') return null
+    const flow = owner as DirectoryFlowOwnerProps
+    if (!flow.open) return null
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          const path = pick()
+          if (path === null) flow.onCancel()
+          else flow.onPicked(path)
+        }}
+      >
+        选择目录
+      </button>
+    )
+  }) as WorkspaceBrowserProps['renderSlot']
+}
+
+/** Directory-flow stub that fails the interaction instead of settling with a path. */
+function failingFlow(message: string): WorkspaceBrowserProps['renderSlot'] {
+  return ((name: string, owner: object) => {
+    if (name !== 'sidebar.workspaces.directoryFlow') return null
+    const flow = owner as DirectoryFlowOwnerProps
+    if (!flow.open) return null
+    return <button type="button" onClick={() => { flow.onError(message) }}>选择目录</button>
+  }) as WorkspaceBrowserProps['renderSlot']
+}
+
 /** The tree's own row title: the Workspace card repeats the clicked title inside its dialog. */
 function rowTitle(name: string): HTMLElement {
   const panel = document.querySelector('[role="dialog"]')
@@ -2511,10 +2542,12 @@ describe('WorkspaceBrowser', () => {
   it('edits the project name and folders through the card dialog', async () => {
     const setWorkspacePaths = vi.fn(async () => {})
     const renameWorkspace = vi.fn(async () => {})
+    let nextPick = '/projects/alpha'
     const browser = mount({
       useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
       setWorkspacePaths,
       renameWorkspace,
+      renderSlot: pickingFlow(() => nextPick),
     })
     browser.openDialog(wid('alpha'), 'Alpha', 'folders')
     expect(screen.getByRole('dialog').textContent).toContain('编辑项目')
@@ -2525,20 +2558,17 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByRole('alert').textContent).toBe('工作区至少要保留一个文件夹')
     expect(screen.getByText('alpha')).toBeTruthy()
     expect(screen.getByText('主文件夹')).toBeTruthy()
-    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
-    // A relative or repeated draft explains itself instead of doing nothing.
-    fireEvent.change(input, { target: { value: 'relative/dir' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
-    expect(screen.getByRole('alert').textContent).toBe('请输入绝对路径')
-    fireEvent.change(input, { target: { value: '/projects/alpha' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    // The Host chooses the directory: the row opens the flow instead of taking a typed path.
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择目录' }))
     expect(screen.getByRole('alert').textContent).toBe('该文件夹已在列表中')
     // Save with nothing changed closes nothing and calls nothing.
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(renameWorkspace).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeTruthy()
-    fireEvent.change(input, { target: { value: '/projects/shared' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加' }))
+    nextPick = '/projects/shared'
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择目录' }))
     expect(screen.getByText('shared')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await act(async () => {})
@@ -2571,22 +2601,17 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('adds a directory with Enter and ignores dismissal while saving', async () => {
+  it('adds a picked directory and ignores dismissal while saving', async () => {
     let release: (() => void) | undefined
     const setWorkspacePaths = vi.fn(() => new Promise<void>((resolve) => { release = resolve }))
     const browser = mount({
       useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
       setWorkspacePaths,
+      renderSlot: pickingFlow(() => '/projects/shared'),
     })
     browser.openDialog(wid('alpha'), 'Alpha', 'folders')
-    const input = screen.getByLabelText<HTMLInputElement>('文件夹路径')
-    // An empty draft cannot be added, and other keys leave the draft alone.
-    fireEvent.keyDown(input, { key: 'Enter' })
-    fireEvent.change(input, { target: { value: '/projects' } })
-    fireEvent.keyDown(input, { key: 'a' })
-    expect(screen.queryByText('/projects')).toBeNull()
-    fireEvent.change(input, { target: { value: '/projects/shared' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择目录' }))
     expect(screen.getByText('shared')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     // Saving pins the dialog open: Escape and the close control are inert until it settles.
@@ -2649,6 +2674,36 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByText('/')).toBeTruthy()
   })
 
+  it('cancels the chooser and reports a chooser failure in the dialog', () => {
+    const setWorkspacePaths = vi.fn(async () => {})
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      setWorkspacePaths,
+      renderSlot: pickingFlow(() => null),
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择目录' }))
+    // A dismissed chooser leaves the list alone and takes the flow down with it.
+    expect(screen.queryByRole('button', { name: '选择目录' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    rerender(browser, { renderSlot: failingFlow('chooser unavailable') })
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择目录' }))
+    expect(screen.getByRole('alert').textContent).toBe('chooser unavailable')
+    expect(screen.queryByRole('button', { name: '选择目录' })).toBeNull()
+  })
+
+  it('hides the add row when the composition has no chooser', () => {
+    const browser = mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => false, subscribe: () => () => {} }),
+    })
+    browser.openDialog(wid('alpha'), 'Alpha', 'folders')
+    expect(screen.queryByRole('button', { name: '添加文件夹' })).toBeNull()
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
   it('closes the edit dialog without saving through Cancel', () => {
     const setWorkspacePaths = vi.fn(async () => {})
     const browser = mount({
@@ -2656,7 +2711,7 @@ describe('WorkspaceBrowser', () => {
       setWorkspacePaths,
     })
     browser.openDialog(wid('alpha'), 'Alpha', 'folders')
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>('文件夹路径'), { target: { value: '/projects/shared' } })
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(setWorkspacePaths).not.toHaveBeenCalled()

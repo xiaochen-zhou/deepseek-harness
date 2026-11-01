@@ -16,7 +16,7 @@ Workspace 之前只对应一个规范目录：它把记录的工作目录（`cwd
 - `SessionHeader.workspaceRoots` 在创建 Session 时快照该列表（主目录在前），`SessionStore.fork` 会复制它。沙箱策略从该快照推导 `additionalWritableRoots`：先是部署配置的根目录，然后是快照中除 Session 自身 `cwd` 之外的每个条目。没有快照的 Session 保持原有的单目录行为。
 - 快照正是策略可回放的原因。在解析 Session 的沙箱策略时读取 Workspace 注册表，会让一个对模型可见的权限依赖 Session 日志之外的可变状态，而“对模型可见 ⟺ 已记录”规则禁止这样做。因此复用要求快照完全相同：记录根目录不同的空 Session 会被新铸造的 Session 取代，而不是被悄悄放宽或收窄。
 - `workspace.create` 接受 `extraPaths`，`workspace.setPaths` 替换列表，`WorkspaceView.paths` 发布它。Client 模型像处理其他单次变更一样 upsert 返回的行。冲突以 `workspace/path-conflict` 暴露并携带拥有者的 Workspace id，对话框会在它尝试添加的文件夹旁报告该错误。
-- UI 在 Workspace 行菜单中增加文件夹对话框：它列出目录，可逐个移除但不会移除最后一个，并可输入路径添加。保存时发送完整的有序列表，因此规范化与冲突判定仍由 Host 负责。
+- UI 从 Workspace 卡片打开“编辑项目”对话框：它列出目录，可逐个移除但不会移除最后一个，新增目录走 Host 选择器（与其它添加 Workspace 的入口一致）。保存时发送完整的有序列表，因此规范化与冲突判定仍由 Host 负责。
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ Workspace 之前只对应一个规范目录：它把记录的工作目录（`cwd
 - 在 Workspace 增加目录之前创建的 Session 保持其较窄的集合；只有新 Session 能看到新增目录。UI 不会就此提示，约定是：可写集合在创建时固定。
 - 一个目录最多属于一个 Workspace，因此把仓库在项目之间移动需要先从一个列表移除再加入另一个列表。冲突错误会指明拥有者，而不是静默移动。
 - 从 Workspace 移除目录会把记录在该目录上的 Session 变为未分组。它们的历史、顺序与日志都会保留，重新添加该目录会再次挂接它们。
-- 文件夹对话框按用户输入的字符串编辑路径；Host 会做规范化，因此可能保存不同的写法。对话框以返回的行为准刷新，而不是以自己的输入为准。
+- 文件夹对话框编辑 Host 返回的路径列表；规范化与冲突拒绝都在 Host 侧完成，对话框以返回的行为准刷新，而不是以自己的草稿为准。
 
 ## Testing
 

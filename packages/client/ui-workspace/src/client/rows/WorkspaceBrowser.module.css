@@ -693,22 +693,33 @@
   white-space: nowrap;
 }
 
+/** The add row is one full-width button; the host chooser owns the path. */
 .folderAdd {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  cursor: pointer;
 }
 
-/* The path input claims the row; both buttons keep their label on one line. */
-.folderRow > button,
-.folderAdd > button {
+.folderAdd:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.folderAdd:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.folderRow > button {
   flex: none;
   white-space: nowrap;
-}
-
-.folderAdd > input {
-  flex: 1;
-  min-width: 0;
 }
 
 /* The hovered Workspace card sits on the hover tooltip's dark surface, so it
@@ -864,22 +875,6 @@
 .folderRemove:disabled {
   cursor: default;
   opacity: 0.4;
-}
-
-.editAddInput {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font-size: 13px;
-  color: var(--dsw-alias-label-primary);
-}
-
-.editAddInput::placeholder {
-  color: var(--dsw-alias-label-secondary);
 }
 
 .folderName {

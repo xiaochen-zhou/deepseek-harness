@@ -16,7 +16,7 @@ A Workspace was one canonical directory: it grouped the Sessions whose recorded 
 - `SessionHeader.workspaceRoots` snapshots the list when the Session is created, primary first, and `SessionStore.fork` copies it. The sandbox policy derives `additionalWritableRoots` from that snapshot: deployment-configured roots first, then every snapshot entry except the Session's own `cwd`. A Session created without a snapshot keeps the previous single-directory behavior.
 - The snapshot is the reason the policy stays replayable. Reading the Workspace registry while resolving a Session's sandbox policy would make a model-visible permission depend on mutable state outside the Session log, which the "model-visible ⟺ logged" rule forbids. Reuse therefore requires an identical snapshot: a blank Session whose recorded roots differ is replaced by a freshly minted one rather than silently widened or narrowed.
 - `workspace.create` accepts `extraPaths`, `workspace.setPaths` replaces the list, and `WorkspaceView.paths` publishes it. The Client model upserts the returned row like every other unary mutation. A conflict surfaces as `workspace/path-conflict` carrying the owning Workspace id, which the dialog reports next to the folder it tried to add.
-- The UI adds a folders dialog to the Workspace row menu: it lists the directories, removes one at a time but never the last, and adds a typed path. Saving sends the complete ordered list, so the Host stays authoritative about canonicalization and conflicts.
+- The UI opens an Edit project dialog from the Workspace card: it lists the directories, removes one at a time but never the last, and adds one through the Host chooser that every other add-Workspace affordance uses. Saving sends the complete ordered list, so the Host stays authoritative about canonicalization and conflicts.
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ A Workspace was one canonical directory: it grouped the Sessions whose recorded 
 - A Session created before its Workspace gained directories keeps its narrower set; only new Sessions see the added directories. The UI does not warn about this, and the contract is that the writable set is fixed at creation.
 - A directory belongs to at most one Workspace, so moving a repository between projects requires removing it from one list before adding it to another. The conflict error names the owner rather than moving it silently.
 - Removing a directory from a Workspace ungroups the Sessions recorded there. Their histories, order, and logs survive, and re-adding the directory attaches them again.
-- The folder dialog edits paths as typed strings; the Host canonicalizes and may store a different spelling. The dialog refreshes from the returned row rather than from its own input.
+- The folder dialog edits the path list the Host reported; canonicalization and conflict rejection stay Host-side, and the dialog refreshes from the returned row rather than from its own draft.
 
 ## Testing
 

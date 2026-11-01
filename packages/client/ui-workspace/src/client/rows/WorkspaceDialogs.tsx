@@ -4,13 +4,10 @@ import {
   Button, IconCloseFillRegular, IconFolderOpenRegular, IconPlusOutlineRegular, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { WorkspaceActionRequest, WorkspaceBrowserProps } from '../contract/slots.ts'
+import type {
+  DirectoryFlowOwnerProps, WorkspaceActionRequest, WorkspaceBrowserProps,
+} from '../contract/slots.ts'
 import css from './WorkspaceBrowser.module.css'
-
-/** Whether a draft names an absolute directory rather than a relative fragment. */
-function absolutePath(path: string): boolean {
-  return path.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(path) || path.startsWith('\\\\')
-}
 
 /** Last path segment of a directory, for a row that shows the full path on hover. */
 function folderName(path: string): string {
@@ -20,7 +17,8 @@ function folderName(path: string): string {
 
 type Props = Pick<
   WorkspaceBrowserProps,
-  'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction' | 'requestWorkspaceAction' | 't'
+  | 'renameWorkspace' | 'deleteWorkspace' | 'setWorkspacePaths' | 'settleWorkspaceAction'
+  | 'requestWorkspaceAction' | 'useDirectoryFlow' | 'renderSlot' | 't'
 > & {
   request: WorkspaceActionRequest
   workspaces: readonly WorkspaceView[]
@@ -28,7 +26,8 @@ type Props = Pick<
 
 /** @param props - captured request, current Workspace list, and existing mutations. @returns the active dialog. */
 export function WorkspaceDialogs({
-  request, workspaces, renameWorkspace, deleteWorkspace, setWorkspacePaths, settleWorkspaceAction, requestWorkspaceAction, t,
+  request, workspaces, renameWorkspace, deleteWorkspace, setWorkspacePaths, settleWorkspaceAction,
+  requestWorkspaceAction, useDirectoryFlow, renderSlot, t,
 }: Props) {
   const composingRef = useRef(false)
   const renameTarget = request.action === 'rename' ? request : null
@@ -97,29 +96,42 @@ export function WorkspaceDialogs({
   const foldersTarget = request.action === 'folders' ? request : null
   const [nameDraft, setNameDraft] = useState(request.storedTitle)
   const [folderDraft, setFolderDraft] = useState<readonly string[]>(request.paths)
-  const [folderInput, setFolderInput] = useState('')
   const [savingFolders, setSavingFolders] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
   const foldersChanged = folderDraft.length !== request.paths.length
     || folderDraft.some((path, index) => path !== request.paths[index])
   const nameTrimmed = nameDraft.trim()
   const nameChanged = nameTrimmed !== '' && nameTrimmed !== request.storedTitle
-  const folderTrimmed = folderInput.trim()
-  const canAddFolder = folderTrimmed !== '' && !savingFolders
-  const addFolder = () => {
-    if (!canAddFolder) return
-    // Each refusal names the reason, so an unresponsive Add never leaves a typed path unexplained.
-    if (!absolutePath(folderTrimmed)) {
-      setFolderError(t('folders.absolutePath'))
-      return
-    }
-    if (folderDraft.includes(folderTrimmed)) {
+  // The Host picks the directory: a typed path could not tell the operator
+  // which directory they had actually chosen, and every other add-workspace
+  // affordance in this package also goes through the host chooser.
+  const flowAvailable = useDirectoryFlow(occupied => occupied)
+  const [flowOpen, setFlowOpen] = useState(false)
+  useEffect(() => {
+    // A withdrawn chooser (dialog closed, occupant unloaded) must not reopen on
+    // the next dialog: the owner conversation ends with the interaction.
+    if (foldersTarget === null || !flowAvailable) setFlowOpen(false)
+  }, [foldersTarget, flowAvailable])
+  const appendFolder = (path: string) => {
+    if (folderDraft.includes(path)) {
       setFolderError(t('folders.duplicate'))
       return
     }
-    setFolderDraft([...folderDraft, folderTrimmed])
-    setFolderInput('')
+    setFolderDraft([...folderDraft, path])
     setFolderError(null)
+  }
+  const flowOwner: DirectoryFlowOwnerProps = {
+    open: flowOpen,
+    busy: savingFolders,
+    onPicked: (path) => {
+      setFlowOpen(false)
+      appendFolder(path)
+    },
+    onCancel: () => { setFlowOpen(false) },
+    onError: (message) => {
+      setFlowOpen(false)
+      setFolderError(message)
+    },
   }
   const removeFolder = (path: string) => {
     if (folderDraft.length === 1) {
@@ -131,6 +143,7 @@ export function WorkspaceDialogs({
   }
   const closeFolders = () => {
     if (savingFolders) return
+    setFlowOpen(false)
     settleWorkspaceAction()
     setFolderError(null)
   }
@@ -275,25 +288,24 @@ export function WorkspaceDialogs({
             </button>
           </li>
         ))}
-        <li className={css.folderAdd}>
-          <IconPlusOutlineRegular size={14} />
-          <input
-            className={css.editAddInput}
-            value={folderInput}
-            aria-label={t('folders.addLabel')}
-            placeholder={t('edit.addFolder')}
-            disabled={savingFolders}
-            onChange={(event) => { setFolderInput(event.target.value); setFolderError(null) }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                addFolder()
-              }
-            }}
-          />
-          <Button variant="outline" disabled={!canAddFolder} onClick={addFolder}>{t('folders.add')}</Button>
-        </li>
+        {/* No picking occupant in this composition means no folder can be
+            added here; the row withdraws rather than offering a chooser that
+            nobody answers. */}
+        {flowAvailable && (
+          <li>
+            <button
+              type="button"
+              className={css.folderAdd}
+              disabled={savingFolders}
+              onClick={() => { setFlowOpen(true); setFolderError(null) }}
+            >
+              <IconPlusOutlineRegular size={14} />
+              {t('edit.addFolder')}
+            </button>
+          </li>
+        )}
       </ul>
+      {flowOpen && renderSlot('sidebar.workspaces.directoryFlow', flowOwner)}
       {folderError !== null && <div className={css.renameError} role="alert">{folderError}</div>}
     </Modal>
   </>

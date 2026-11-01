@@ -1449,7 +1449,8 @@ export function WorkspaceBrowser({
       {workspaceActionRequest !== null && <WorkspaceDialogs key={`${workspaceActionRequest.action}/${workspaceActionRequest.workspaceId}`}
         request={workspaceActionRequest} workspaces={workspaces} renameWorkspace={renameWorkspace} deleteWorkspace={deleteWorkspace}
         setWorkspacePaths={setWorkspacePaths} requestWorkspaceAction={requestWorkspaceAction}
-        settleWorkspaceAction={settleWorkspaceAction} t={t} />}
+        settleWorkspaceAction={settleWorkspaceAction} useDirectoryFlow={useDirectoryFlow}
+        renderSlot={renderSlot} t={t} />}
     </div>
   )
 }
