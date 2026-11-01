@@ -7,6 +7,11 @@ import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-
 import type { WorkspaceActionRequest, WorkspaceBrowserProps } from '../contract/slots.ts'
 import css from './WorkspaceBrowser.module.css'
 
+/** Whether a draft names an absolute directory rather than a relative fragment. */
+function absolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(path) || path.startsWith('\\\\')
+}
+
 /** Last path segment of a directory, for a row that shows the full path on hover. */
 function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter(part => part !== '')
@@ -100,9 +105,18 @@ export function WorkspaceDialogs({
   const nameTrimmed = nameDraft.trim()
   const nameChanged = nameTrimmed !== '' && nameTrimmed !== request.storedTitle
   const folderTrimmed = folderInput.trim()
-  const canAddFolder = folderTrimmed !== '' && !folderDraft.includes(folderTrimmed) && !savingFolders
+  const canAddFolder = folderTrimmed !== '' && !savingFolders
   const addFolder = () => {
     if (!canAddFolder) return
+    // Each refusal names the reason, so an unresponsive Add never leaves a typed path unexplained.
+    if (!absolutePath(folderTrimmed)) {
+      setFolderError(t('folders.absolutePath'))
+      return
+    }
+    if (folderDraft.includes(folderTrimmed)) {
+      setFolderError(t('folders.duplicate'))
+      return
+    }
     setFolderDraft([...folderDraft, folderTrimmed])
     setFolderInput('')
     setFolderError(null)
