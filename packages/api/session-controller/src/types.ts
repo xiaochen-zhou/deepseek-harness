@@ -146,6 +146,11 @@ export type QueueAction =
   }
   | { readonly kind: 'remove' }
   | { readonly kind: 'steer' }
+  | {
+    readonly kind: 'move'
+    /** Pending item to place this one before; `null` places it last. */
+    readonly before: MessageId | null
+  }
 
 /** One Session list entry. */
 export interface SessionSummary {

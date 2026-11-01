@@ -141,6 +141,55 @@ describe('Session queue commands', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
+  it('reorders pending items against the row they are dropped before', async () => {
+    const { ctx, controller, agent, inbox } = await commandHarness()
+    try {
+      const first = createUserMessage({ content: [{ type: 'text', text: 'first' }], source: { kind: 'user' } })
+      const second = createUserMessage({ content: [{ type: 'text', text: 'second' }], source: { kind: 'user' } })
+      const third = createUserMessage({ content: [{ type: 'text', text: 'third' }], source: { kind: 'user' } })
+      for (const message of [first, second, third]) inbox.append('next-turn', message)
+      const order = (): readonly string[] => inbox.nextTurn.map(message => (
+        message.content.map(block => block.type === 'text' ? block.text : '').join('')
+      ))
+
+      // Downward: the third item lands before the first.
+      expect(await controller.updateQueue({
+        sessionId: agent.id, itemId: third.id, action: { kind: 'move', before: first.id },
+      })).toEqual({ accepted: true })
+      expect(order()).toEqual(['third', 'first', 'second'])
+
+      // Upward: the last item lands at the end.
+      expect(await controller.updateQueue({
+        sessionId: agent.id, itemId: second.id, action: { kind: 'move', before: null },
+      })).toEqual({ accepted: true })
+      expect(order()).toEqual(['third', 'first', 'second'])
+
+      // A move that keeps the position records nothing and changes nothing.
+      expect(await controller.updateQueue({
+        sessionId: agent.id, itemId: first.id, action: { kind: 'move', before: second.id },
+      })).toEqual({ accepted: true })
+      expect(order()).toEqual(['third', 'first', 'second'])
+      // Dropping an item onto itself is the same no-op.
+      expect(await controller.updateQueue({
+        sessionId: agent.id, itemId: first.id, action: { kind: 'move', before: first.id },
+      })).toEqual({ accepted: true })
+      expect(order()).toEqual(['third', 'first', 'second'])
+      await expectFailure(Promise.resolve().then(() => controller.updateQueue({
+        sessionId: agent.id, itemId: first.id, action: { kind: 'move', before: MessageId('missing') },
+      })), 'session/queue-item-not-found')
+
+      // Steering items reorder inside their own pending list.
+      const stepOne = createUserMessage({ content: [{ type: 'text', text: 'step one' }], source: { kind: 'user' } })
+      const stepTwo = createUserMessage({ content: [{ type: 'text', text: 'step two' }], source: { kind: 'user' } })
+      inbox.append('next-step', stepOne)
+      inbox.append('next-step', stepTwo)
+      expect(await controller.updateQueue({
+        sessionId: agent.id, itemId: stepTwo.id, action: { kind: 'move', before: stepOne.id },
+      })).toEqual({ accepted: true })
+      expect(inbox.nextStep.map(message => message.id)).toEqual([stepTwo.id, stepOne.id])
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('preserves the cold Agent resolver rejection', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
