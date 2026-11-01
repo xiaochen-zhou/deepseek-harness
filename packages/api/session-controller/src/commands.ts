@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-file-upload'
 import {
   ReasoningEffortId, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageSource, TextBlock } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -55,6 +55,46 @@ import type {
 type PromptContentCandidate =
   | SessionPromptRequest['content'][number]
   | Extract<SessionUpdateQueueRequest['action'], { readonly kind: 'edit' }>['content'][number]
+
+/**
+ * Whether queued message content carries text or an attachment.
+ * @param content - content blocks of a queued message.
+ * @returns false for a message the Agent must not receive.
+ */
+function hasMessageContent(content: readonly ContentBlock[]): boolean {
+  return content.some(block => block.type !== 'text' || block.text.trim().length > 0)
+}
+
+/**
+ * Replace the text of a queued message while keeping the attachments it already carries.
+ *
+ * Editing sends text only, so image blocks survive at their original positions; an edit that
+ * clears the text of an image-only message leaves just the attachments.
+ * @param existing - content blocks the queued message currently carries.
+ * @param edited - text blocks submitted as the replacement.
+ * @returns content blocks of the edited message.
+ */
+function mergeEditedText(
+  existing: readonly ContentBlock[],
+  edited: readonly TextBlock[],
+): readonly ContentBlock[] {
+  if (existing.every(block => block.type === 'text')) return [...edited]
+  const text = edited.filter(block => block.text.trim() !== '')
+  if (text.length === 0) return existing.filter(block => block.type !== 'text')
+  const merged: ContentBlock[] = []
+  let placed = false
+  for (const block of existing) {
+    if (block.type !== 'text') {
+      merged.push(block)
+      continue
+    }
+    if (placed) continue
+    placed = true
+    merged.push(...text)
+  }
+  if (!placed) merged.push(...text)
+  return merged
+}
 
 /**
  * Whether prompt content carries non-whitespace text or an attachment.
@@ -392,13 +432,6 @@ export class SessionCommandController {
           { reason: 'QUEUE_EDIT_NON_TEXT' },
         )
       }
-      if (!hasPromptContent(request.action.content)) {
-        throw new RemoteError(
-          'gateway/bad-request',
-          'queue edit content must include non-whitespace text',
-          {},
-        )
-      }
     }
     let agent = this.ctx.agents.get(request.sessionId)
     if (agent === undefined) {
@@ -427,6 +460,14 @@ export class SessionCommandController {
       throw new RemoteError('session/queue-item-not-found', 'queued item is no longer pending', { itemId: request.itemId })
     }
     const { target, message } = located
+    if (request.action.kind === 'edit'
+      && !hasMessageContent(mergeEditedText(message.content, request.action.content))) {
+      throw new RemoteError(
+        'gateway/bad-request',
+        'queue edit content must include non-whitespace text',
+        {},
+      )
+    }
     if (request.action.kind === 'steer' && (target !== 'next-turn' || agent.status !== 'running')) {
       throw new RemoteError('session/steer-unavailable', 'current turn no longer accepts steering', { itemId: request.itemId })
     }
@@ -434,7 +475,7 @@ export class SessionCommandController {
       case 'edit':
         agent.inbox.replace(request.itemId, freezeMessage<UserMessage>({
           ...message,
-          content: [...request.action.content],
+          content: mergeEditedText(message.content, request.action.content),
         }))
         break
       case 'remove': {

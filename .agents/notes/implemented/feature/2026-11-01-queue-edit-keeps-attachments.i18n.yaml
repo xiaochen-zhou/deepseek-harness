@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-01-queue-edit-keeps-attachments.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-01-queue-edit-keeps-attachments.md
+/agent-note-editing-a-queued-message-keeps-its-attachments:
+  en: 9573067772e5eb47
+  zh: 5636c7bafc2de956
+/agent-note-editing-a-queued-message-keeps-its-attachments/problem:
+  en: c8185a73c78f897b
+  zh: d4dcc03808eb59b1
+/agent-note-editing-a-queued-message-keeps-its-attachments/decision:
+  en: 9f203fb671d48090
+  zh: 8d7b971642cab17f
+/agent-note-editing-a-queued-message-keeps-its-attachments/alternatives-considered:
+  en: c68026465a1be055
+  zh: 1b00cf7168cdfa9b
+/agent-note-editing-a-queued-message-keeps-its-attachments/consequences:
+  en: 041d09d8129bc476
+  zh: e6e1e15f0e0866db
+/agent-note-editing-a-queued-message-keeps-its-attachments/testing:
+  en: 34a0afff7e8e48f9
+  zh: e315669c12522344

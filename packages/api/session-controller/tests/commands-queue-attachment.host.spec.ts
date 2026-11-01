@@ -324,6 +324,71 @@ describe('Session queue commands', () => {
   })
 })
 
+describe('Queue edits that keep attachments', () => {
+  it('replaces the text of an image message and keeps every image block', async () => {
+    const { controller, agent, inbox } = await commandHarness()
+    const ref: ImageAttachmentRef = {
+      attachmentId: AttachmentId(`sha256:${'cd'.repeat(32)}`),
+      mediaType: 'image/png', bytes: 2, width: 1, height: 1,
+    }
+    const queued = createUserMessage({
+      content: [{ type: 'text', text: 'before' }, { type: 'image', attachment: ref }],
+      source: { kind: 'user' },
+    })
+    const imageOnly = createUserMessage({
+      content: [{ type: 'image', attachment: ref }],
+      source: { kind: 'user' },
+    })
+    inbox.append('next-turn', queued)
+    inbox.append('next-turn', imageOnly)
+
+    await controller.updateQueue({
+      sessionId: agent.id,
+      itemId: queued.id,
+      action: { kind: 'edit', content: [{ type: 'text', text: 'after' }] },
+    })
+    expect(inbox.nextTurn[0]?.content).toEqual([
+      { type: 'text', text: 'after' },
+      { type: 'image', attachment: ref },
+    ])
+
+    // The text lands after an attachment that had none of its own.
+    await controller.updateQueue({
+      sessionId: agent.id,
+      itemId: imageOnly.id,
+      action: { kind: 'edit', content: [{ type: 'text', text: 'caption' }] },
+    })
+    expect(inbox.nextTurn[1]?.content).toEqual([
+      { type: 'image', attachment: ref },
+      { type: 'text', text: 'caption' },
+    ])
+
+    // A second text block collapses into the first position instead of appending.
+    const split = createUserMessage({
+      content: [{ type: 'text', text: 'first' }, { type: 'image', attachment: ref }, { type: 'text', text: 'second' }],
+      source: { kind: 'user' },
+    })
+    inbox.append('next-turn', split)
+    await controller.updateQueue({
+      sessionId: agent.id,
+      itemId: split.id,
+      action: { kind: 'edit', content: [{ type: 'text', text: 'one text' }] },
+    })
+    expect(inbox.nextTurn[2]?.content).toEqual([
+      { type: 'text', text: 'one text' },
+      { type: 'image', attachment: ref },
+    ])
+
+    // Clearing the caption leaves the attachment alone instead of rejecting the edit.
+    await controller.updateQueue({
+      sessionId: agent.id,
+      itemId: imageOnly.id,
+      action: { kind: 'edit', content: [{ type: 'text', text: '  ' }] },
+    })
+    expect(inbox.nextTurn[1]?.content).toEqual([{ type: 'image', attachment: ref }])
+  })
+})
+
 describe('Session attachment reads', () => {
   it.each(['commands-session', 'other-session', 'missing-session'])('reads a supplied reference without looking up history for %s', async (id) => {
     const { ctx, controller, agent, resolveAgent } = await commandHarness()
