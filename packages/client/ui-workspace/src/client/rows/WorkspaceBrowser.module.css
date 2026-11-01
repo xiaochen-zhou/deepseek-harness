@@ -698,3 +698,15 @@
   align-items: center;
   gap: 8px;
 }
+
+/* The path input claims the row; both buttons keep their label on one line. */
+.folderRow > button,
+.folderAdd > button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.folderAdd > input {
+  flex: 1;
+  min-width: 0;
+}
